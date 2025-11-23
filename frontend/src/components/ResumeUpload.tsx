@@ -1,18 +1,30 @@
 import { useState } from 'react';
-import { Upload, Button, Card, Form, Input, Space, message, Alert, Tag, Typography } from 'antd';
-import { UploadOutlined, CheckCircleOutlined, ExclamationCircleOutlined, LinkOutlined, PhoneOutlined, MailOutlined, UserOutlined } from '@ant-design/icons';
+import { Upload, Button, Form, Input, Space, message, Alert, Tag, Typography, Row, Col, Divider } from 'antd';
+import {
+  CloudUploadOutlined,
+  CheckCircleOutlined,
+  ExclamationCircleOutlined,
+  LinkOutlined,
+  PhoneOutlined,
+  MailOutlined,
+  UserOutlined,
+  DeleteOutlined,
+  FileTextOutlined,
+  BankOutlined,
+  RocketOutlined,
+  TrophyOutlined
+} from '@ant-design/icons';
 import type { UploadFile, UploadProps } from 'antd/es/upload/interface';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
-import { setCandidateId, setProfile, setResumeFile, setResumeData, clearCandidate } from '../store/candidateSlice';
+import { setCandidateId, setProfile, updateProfile, setResumeFile, setResumeData, clearCandidate } from '../store/candidateSlice';
 import { setLastActiveCandidateId } from '../store/sessionSlice';
 import type { CandidateProfile } from '../store/candidateSlice';
 import { uploadResume } from '../api/services';
 
-const { Text } = Typography;
+const { Text, Title, Paragraph } = Typography;
+const { Dragger } = Upload;
 
 // Utility function to safely handle arrays and descriptions
-// This prevents "exp.description.map is not a function" errors when the API returns
-// different data types (string vs array) for description fields
 const safeArrayMap = <T,>(data: T | T[] | undefined | null): T[] => {
   if (!data) return [];
   if (Array.isArray(data)) return data;
@@ -46,7 +58,6 @@ const ResumeUpload = ({ onStartInterview }: ResumeUploadProps = {}) => {
       reader.readAsDataURL(file);
       reader.onload = () => {
         const result = reader.result as string;
-        // Remove the data:application/pdf;base64, prefix
         const base64 = result.split(',')[1];
         resolve(base64);
       };
@@ -56,17 +67,13 @@ const ResumeUpload = ({ onStartInterview }: ResumeUploadProps = {}) => {
 
   const handleUpload: UploadProps['customRequest'] = async (options) => {
     const { file, onSuccess, onError } = options;
-    
+
     try {
       setUploading(true);
-      
-      // Convert file to base64 for local storage
+
       const base64 = await fileToBase64(file as File);
-      
-      // Call resume parsing API
       const response = await uploadResume(file as File);
-      
-      // Store in Redux
+
       dispatch(setCandidateId(response.candidateId));
       dispatch(setProfile(response.extracted));
       dispatch(setResumeFile({
@@ -79,27 +86,20 @@ const ResumeUpload = ({ onStartInterview }: ResumeUploadProps = {}) => {
         text: response.resumeText,
         base64: base64
       }));
-      
-      // Track this as an active session
+
       dispatch(setLastActiveCandidateId(response.candidateId));
-      
       setUploadedFile(file as UploadFile);
-      
-      // Set form values
       form.setFieldsValue(response.extracted);
-      
-      // Process the extracted data
-      
-      // Check for missing mandatory fields
+
       const missing = validateMandatoryFields(response.extracted);
       setMissingFields(missing);
-      
+
       if (missing.length > 0) {
         message.warning(`Please fill in the missing mandatory fields: ${missing.join(', ')}`);
       } else {
         message.success('Resume uploaded and processed successfully!');
       }
-      
+
       onSuccess?.(response);
     } catch (error) {
       console.error('Upload error:', error);
@@ -115,36 +115,31 @@ const ResumeUpload = ({ onStartInterview }: ResumeUploadProps = {}) => {
   };
 
   const beforeUpload = (file: UploadFile) => {
-    const isValidType = file.type === 'application/pdf' || 
-                       file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-    
+    const isValidType = file.type === 'application/pdf' ||
+      file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
     if (!isValidType) {
       message.error('Please upload only PDF or DOCX files!');
       return false;
     }
-
     const isLt5M = (file.size || 0) / 1024 / 1024 < 5;
     if (!isLt5M) {
       message.error('File must be smaller than 5MB!');
       return false;
     }
-
     return true;
   };
 
   const handleSaveProfile = async (values: CandidateProfile) => {
     try {
-      // Check for missing mandatory fields
       const missing = validateMandatoryFields(values);
       setMissingFields(missing);
-      
+
       if (missing.length > 0) {
         message.error(`Please fill in the missing mandatory fields: ${missing.join(', ')}`);
         return;
       }
-      
-      // Save to Redux store
-      dispatch(setProfile(values));
+
+      dispatch(updateProfile(values));
       message.success('Profile saved successfully!');
     } catch {
       message.error('Failed to save profile');
@@ -159,268 +154,267 @@ const ResumeUpload = ({ onStartInterview }: ResumeUploadProps = {}) => {
   };
 
   return (
-    <div style={{ width: '100%' }}>
-      <Card title="Resume Upload" style={{ marginBottom: '24px' }}>
+    <div style={{ maxWidth: '1000px', margin: '0 auto' }}>
+      {/* Upload Section */}
+      <div className="card mb-4" style={{ textAlign: 'center' }}>
+        <Title level={3} style={{ marginBottom: '24px' }}>
+          Upload Your Resume
+        </Title>
+
         {!uploadedFile ? (
-          <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-            <Upload
-              accept=".pdf,.docx"
-              showUploadList={false}
-              customRequest={handleUpload}
-              beforeUpload={beforeUpload}
-              maxCount={1}
-            >
-              <div style={{
-                border: '2px dashed #d9d9d9',
-                borderRadius: '8px',
-                padding: '40px',
-                backgroundColor: '#fafafa',
-                cursor: 'pointer',
-                transition: 'border-color 0.3s'
-              }}>
-                <UploadOutlined style={{ fontSize: '48px', color: '#d9d9d9', marginBottom: '16px' }} />
-                <p style={{ fontSize: '16px', marginBottom: '8px' }}>
-                  Click or drag file to upload
-                </p>
-                <p style={{ color: '#888', margin: 0 }}>
-                  Supported formats: PDF, DOCX (Max 5MB)
-                </p>
-              </div>
-            </Upload>
-          </div>
+          <Dragger
+            accept=".pdf,.docx"
+            showUploadList={false}
+            customRequest={handleUpload}
+            beforeUpload={beforeUpload}
+            maxCount={1}
+            style={{
+              padding: '40px',
+              background: '#f8fafc',
+              border: '2px dashed #cbd5e1',
+              borderRadius: '12px'
+            }}
+          >
+            <p className="ant-upload-drag-icon">
+              <CloudUploadOutlined style={{ color: 'var(--primary-color)', fontSize: '48px' }} />
+            </p>
+            <p className="ant-upload-text" style={{ fontSize: '18px', fontWeight: 500 }}>
+              Click or drag file to this area to upload
+            </p>
+            <p className="ant-upload-hint" style={{ color: 'var(--text-secondary)' }}>
+              Support for PDF or DOCX files (Max 5MB)
+            </p>
+          </Dragger>
         ) : (
-          <div>
-            <Alert
-              message="Resume Uploaded Successfully"
-              description={`File: ${uploadedFile.name}`}
-              type="success"
-              icon={<CheckCircleOutlined />}
-              action={
-                <Button size="small" type="link" onClick={handleRemoveFile}>
-                  Remove
-                </Button>
-              }
-              style={{ marginBottom: '16px' }}
-            />
+          <div style={{
+            background: '#f0fdf4',
+            border: '1px solid #bbf7d0',
+            borderRadius: '12px',
+            padding: '24px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <FileTextOutlined style={{ fontSize: '32px', color: 'var(--success-color)' }} />
+              <div style={{ textAlign: 'left' }}>
+                <Text strong style={{ fontSize: '16px', display: 'block' }}>{uploadedFile.name}</Text>
+                <Text type="secondary">Resume uploaded successfully</Text>
+              </div>
+            </div>
+            <Button
+              danger
+              icon={<DeleteOutlined />}
+              onClick={handleRemoveFile}
+            >
+              Remove
+            </Button>
           </div>
         )}
 
         {uploading && (
-          <div style={{ textAlign: 'center', padding: '20px' }}>
-            <div>Processing resume...</div>
+          <div style={{ marginTop: '24px' }}>
+            <Text type="secondary">Parsing resume data... Please wait.</Text>
           </div>
         )}
-      </Card>
+      </div>
 
+      {/* Extracted Data Section */}
       {candidateState.profile && (
-        <Card title="Extracted Profile Information">
-          <Form
-            form={form}
-            layout="vertical"
-            onFinish={handleSaveProfile}
-            initialValues={candidateState.profile}
-          >
-            {/* Mandatory Fields Section */}
-            <div style={{ marginBottom: '24px' }}>
-              <Typography.Title level={4} style={{ marginBottom: '16px', color: '#1890ff' }}>
-                <UserOutlined /> Personal Information (Required)
-              </Typography.Title>
-              
-              {missingFields.length > 0 && (
-                <Alert
-                  message="Missing Required Information"
-                  description={`Please fill in the following mandatory fields: ${missingFields.join(', ')}`}
-                  type="error"
-                  icon={<ExclamationCircleOutlined />}
-                  style={{ marginBottom: '16px' }}
-                />
-              )}
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={handleSaveProfile}
+          initialValues={candidateState.profile}
+        >
+          <div className="animate-fade-in">
+            {/* Personal Info Card */}
+            <div className="card mb-4">
+              <div className="flex-between mb-4">
+                <Title level={4} style={{ margin: 0 }}>
+                  <UserOutlined /> Personal Information
+                </Title>
+                {missingFields.length > 0 && (
+                  <Tag color="error" icon={<ExclamationCircleOutlined />}>
+                    Missing Required Fields
+                  </Tag>
+                )}
+              </div>
 
-              <Form.Item
-                label="Full Name"
-                name="name"
-                rules={[{ required: true, message: 'Please enter your name' }]}
-                validateStatus={missingFields.includes('name') ? 'error' : ''}
-                hasFeedback={missingFields.includes('name')}
-              >
-                <Input 
-                  size="large" 
-                  prefix={<UserOutlined />}
-                  style={{ borderColor: missingFields.includes('name') ? '#ff4d4f' : undefined }}
-                />
-              </Form.Item>
+              <Row gutter={24}>
+                <Col span={8}>
+                  <Form.Item
+                    label="Full Name"
+                    name="name"
+                    rules={[{ required: true, message: 'Required' }]}
+                    validateStatus={missingFields.includes('name') ? 'error' : ''}
+                  >
+                    <Input prefix={<UserOutlined />} size="large" />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item
+                    label="Email"
+                    name="email"
+                    rules={[{ required: true, message: 'Required' }]}
+                    validateStatus={missingFields.includes('email') ? 'error' : ''}
+                  >
+                    <Input prefix={<MailOutlined />} size="large" />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item
+                    label="Phone"
+                    name="phone"
+                    rules={[{ required: true, message: 'Required' }]}
+                    validateStatus={missingFields.includes('phone') ? 'error' : ''}
+                  >
+                    <Input prefix={<PhoneOutlined />} size="large" />
+                  </Form.Item>
+                </Col>
+              </Row>
 
-              <Form.Item
-                label="Email Address"
-                name="email"
-                rules={[
-                  { required: true, message: 'Please enter your email' },
-                  { type: 'email', message: 'Please enter a valid email' }
-                ]}
-                validateStatus={missingFields.includes('email') ? 'error' : ''}
-                hasFeedback={missingFields.includes('email')}
-              >
-                <Input 
-                  size="large" 
-                  prefix={<MailOutlined />}
-                  style={{ borderColor: missingFields.includes('email') ? '#ff4d4f' : undefined }}
-                />
-              </Form.Item>
+              <Divider dashed />
 
-              <Form.Item
-                label="Phone Number"
-                name="phone"
-                rules={[{ required: true, message: 'Please enter your phone number' }]}
-                validateStatus={missingFields.includes('phone') ? 'error' : ''}
-                hasFeedback={missingFields.includes('phone')}
-              >
-                <Input 
-                  size="large" 
-                  prefix={<PhoneOutlined />}
-                  placeholder="Enter your phone number"
-                  style={{ borderColor: missingFields.includes('phone') ? '#ff4d4f' : undefined }}
-                />
-              </Form.Item>
+              <Row gutter={24}>
+                <Col span={8}>
+                  <Form.Item label="LinkedIn" name="linkedin">
+                    <Input prefix={<LinkOutlined />} placeholder="LinkedIn URL" />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item label="GitHub" name="github">
+                    <Input prefix={<LinkOutlined />} placeholder="GitHub URL" />
+                  </Form.Item>
+                </Col>
+                <Col span={8}>
+                  <Form.Item label="Website" name="website">
+                    <Input prefix={<LinkOutlined />} placeholder="Portfolio URL" />
+                  </Form.Item>
+                </Col>
+              </Row>
             </div>
 
-            {/* Optional Fields Section */}
-            {(candidateState.profile.linkedin || candidateState.profile.github || candidateState.profile.website) && (
-              <div style={{ marginBottom: '24px' }}>
-                <Typography.Title level={4} style={{ marginBottom: '16px' }}>
-                  <LinkOutlined /> Links
-                </Typography.Title>
-                
-                {candidateState.profile.linkedin && (
-                  <Form.Item label="LinkedIn" name="linkedin">
-                    <Input size="large" prefix={<LinkOutlined />} />
-                  </Form.Item>
-                )}
-                
-                {candidateState.profile.github && (
-                  <Form.Item label="GitHub" name="github">
-                    <Input size="large" prefix={<LinkOutlined />} />
-                  </Form.Item>
-                )}
-                
-                {candidateState.profile.website && (
-                  <Form.Item label="Website" name="website">
-                    <Input size="large" prefix={<LinkOutlined />} />
-                  </Form.Item>
-                )}
-              </div>
-            )}
-
-            {/* Education Section */}
-            {candidateState.profile.education && candidateState.profile.education.length > 0 && (
-              <div style={{ marginBottom: '24px' }}>
-                <Typography.Title level={4} style={{ marginBottom: '16px' }}>
-                  Education
-                </Typography.Title>
-                {candidateState.profile.education.map((edu, index) => (
-                  <Card key={index} size="small" style={{ marginBottom: '8px' }}>
-                    <Text strong>{edu.institution}</Text>
-                  </Card>
-                ))}
-              </div>
-            )}
-
-            {/* Experience Section */}
-            {candidateState.profile.experience && Array.isArray(candidateState.profile.experience) && candidateState.profile.experience.length > 0 && (
-              <div style={{ marginBottom: '24px' }}>
-                <Typography.Title level={4} style={{ marginBottom: '16px' }}>
-                  Experience ({candidateState.profile.experience.length} items)
-                </Typography.Title>
-                {candidateState.profile.experience.map((exp, index) => {
-
-                  return (
-                    <Card key={index} size="small" style={{ marginBottom: '12px' }}>
-                      <div style={{ marginBottom: '8px' }}>
-                        <Text strong>{exp.key}</Text>
-                        {exp.start && (
-                          <Text type="secondary" style={{ marginLeft: '12px' }}>
-                            {exp.start} {exp.end && exp.end !== 'not found' ? `- ${exp.end}` : '- Present'}
-                          </Text>
+            <Row gutter={24}>
+              {/* Experience Column */}
+              <Col span={12}>
+                <div className="card mb-4" style={{ height: '100%' }}>
+                  <Title level={4} style={{ marginBottom: '24px' }}>
+                    <RocketOutlined /> Experience
+                  </Title>
+                  {candidateState.profile.experience && candidateState.profile.experience.length > 0 ? (
+                    candidateState.profile.experience.map((exp, index) => (
+                      <div key={index} style={{ marginBottom: '24px' }}>
+                        <div className="flex-between">
+                          <Text strong style={{ fontSize: '16px' }}>{exp.key}</Text>
+                          <Tag>{exp.start} - {exp.end}</Tag>
+                        </div>
+                        {exp.description && (
+                          <ul style={{ paddingLeft: '20px', marginTop: '8px', color: 'var(--text-secondary)' }}>
+                            {safeArrayMap(exp.description).slice(0, 3).map((desc, i) => (
+                              <li key={i}>{String(desc)}</li>
+                            ))}
+                          </ul>
                         )}
+                        {index < (candidateState.profile.experience?.length || 0) - 1 && <Divider style={{ margin: '16px 0' }} />}
                       </div>
-                      {exp.description && (
-                        <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px' }}>
-                          {safeArrayMap(exp.description).filter(Boolean).map((desc, descIndex) => (
-                            <li key={descIndex} style={{ marginBottom: '4px' }}>
-                              <Text>{String(desc)}</Text>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </Card>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Projects Section */}
-            {candidateState.profile.projects && Array.isArray(candidateState.profile.projects) && candidateState.profile.projects.length > 0 && (
-              <div style={{ marginBottom: '24px' }}>
-                <Typography.Title level={4} style={{ marginBottom: '16px' }}>
-                  Projects
-                </Typography.Title>
-                {candidateState.profile.projects.map((project, index) => (
-                  <Card key={index} size="small" style={{ marginBottom: '12px' }}>
-                    <div style={{ marginBottom: '8px' }}>
-                      <Text strong>{project.title}</Text>
-                    </div>
-                    {project.description && (
-                      <ul style={{ margin: '8px 0 0 0', paddingLeft: '20px' }}>
-                        {safeArrayMap(project.description).filter(Boolean).map((desc, descIndex) => (
-                          <li key={descIndex} style={{ marginBottom: '4px' }}>
-                            <Text>{String(desc)}</Text>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </Card>
-                ))}
-              </div>
-            )}
-
-            {/* Skills Section */}
-            {candidateState.profile.skills && Array.isArray(candidateState.profile.skills) && candidateState.profile.skills.length > 0 && (
-              <div style={{ marginBottom: '24px' }}>
-                <Typography.Title level={4} style={{ marginBottom: '16px' }}>
-                  Skills
-                </Typography.Title>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                  {candidateState.profile.skills.map((skill, index) => (
-                    <Tag key={index} color="blue">
-                      {skill}
-                    </Tag>
-                  ))}
+                    ))
+                  ) : (
+                    <Text type="secondary">No experience found</Text>
+                  )}
                 </div>
-              </div>
-            )}
+              </Col>
 
-            <Form.Item>
-              <Space>
-                <Button 
-                  type="primary" 
+              {/* Projects & Education Column */}
+              <Col span={12}>
+                {/* Projects */}
+                <div className="card mb-4">
+                  <Title level={4} style={{ marginBottom: '24px' }}>
+                    <TrophyOutlined /> Projects
+                  </Title>
+                  {candidateState.profile.projects && candidateState.profile.projects.length > 0 ? (
+                    candidateState.profile.projects.map((proj, index) => (
+                      <div key={index} style={{ marginBottom: '16px' }}>
+                        <Text strong>{proj.title}</Text>
+                        <Paragraph ellipsis={{ rows: 2 }} type="secondary" style={{ margin: 0 }}>
+                          {safeArrayMap(proj.description).join(' ')}
+                        </Paragraph>
+                      </div>
+                    ))
+                  ) : (
+                    <Text type="secondary">No projects found</Text>
+                  )}
+                </div>
+
+                {/* Education */}
+                <div className="card mb-4">
+                  <Title level={4} style={{ marginBottom: '24px' }}>
+                    <BankOutlined /> Education
+                  </Title>
+                  {candidateState.profile.education && candidateState.profile.education.length > 0 ? (
+                    candidateState.profile.education.map((edu, index) => (
+                      <div key={index} style={{ marginBottom: '8px' }}>
+                        <Text strong>{edu.institution}</Text>
+                      </div>
+                    ))
+                  ) : (
+                    <Text type="secondary">No education found</Text>
+                  )}
+                </div>
+
+                {/* Skills */}
+                <div className="card">
+                  <Title level={4} style={{ marginBottom: '24px' }}>
+                    Skills
+                  </Title>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                    {candidateState.profile.skills && candidateState.profile.skills.length > 0 ? (
+                      candidateState.profile.skills.map((skill, index) => (
+                        <Tag key={index} color="blue" style={{ padding: '4px 12px', borderRadius: '16px' }}>
+                          {skill}
+                        </Tag>
+                      ))
+                    ) : (
+                      <Text type="secondary">No skills found</Text>
+                    )}
+                  </div>
+                </div>
+              </Col>
+            </Row>
+
+            {/* Action Buttons */}
+            <div style={{ textAlign: 'right', marginTop: '24px', paddingBottom: '40px' }}>
+              <Space size="large">
+                <Button size="large" onClick={handleRemoveFile}>
+                  Cancel
+                </Button>
+                <Button
+                  type="primary"
                   htmlType="submit"
                   size="large"
                   disabled={missingFields.length > 0}
+                  style={{ minWidth: '150px' }}
                 >
-                  {missingFields.length > 0 ? 'Complete Required Fields' : 'Save Profile'}
+                  Save Profile
                 </Button>
                 {missingFields.length === 0 && candidateState.isProfileComplete && (
-                  <Button 
-                    size="large" 
-                    type="default"
+                  <Button
+                    size="large"
+                    type="primary"
+                    style={{
+                      background: 'var(--success-color)',
+                      borderColor: 'var(--success-color)',
+                      minWidth: '200px'
+                    }}
                     onClick={onStartInterview}
                   >
-                    Start Interview
+                    Start Interview <RocketOutlined />
                   </Button>
                 )}
               </Space>
-            </Form.Item>
-          </Form>
-        </Card>
+            </div>
+          </div>
+        </Form>
       )}
     </div>
   );

@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Layout, Tabs } from 'antd';
+import { Layout, Tabs, Typography, Button } from 'antd';
+import { RocketOutlined, HistoryOutlined } from '@ant-design/icons';
 import IntervieweePage from './pages/IntervieweePage';
 import InterviewerPage from './pages/InterviewerPage';
 import StartNewInterviewButton from './components/StartNewInterviewButton';
@@ -9,6 +10,7 @@ import { setCurrentTab } from './store/sessionSlice';
 import './App.css';
 
 const { Header, Content } = Layout;
+const { Title } = Typography;
 
 function App() {
   const dispatch = useAppDispatch();
@@ -23,51 +25,84 @@ function App() {
   const tabItems = [
     {
       key: 'interviewee',
-      label: 'Interviewee',
+      label: (
+        <span style={{ fontSize: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <RocketOutlined /> Candidate View
+        </span>
+      ),
       children: <IntervieweePage />,
     },
     {
       key: 'interviewer',
-      label: 'Interviewer',
+      label: (
+        <span style={{ fontSize: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <HistoryOutlined /> Interviewer Dashboard
+        </span>
+      ),
       children: <InterviewerPage />,
     },
   ];
 
   return (
     <div className="app">
-      <Layout style={{ height: '100vh', width: '100vw', margin: 0, padding: 0 }}>
-        <Header 
-          style={{ 
-            backgroundColor: '#0B3D91', 
-            borderBottom: '4px solid #1E90FF',
-            padding: '0 24px',
+      <Layout style={{ minHeight: '100vh', background: 'var(--bg-color)' }}>
+        <Header
+          style={{
+            background: 'var(--card-bg)',
+            borderBottom: '1px solid #e2e8f0',
+            padding: '0 32px',
+            height: '72px',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            flexShrink: 0
+            position: 'sticky',
+            top: 0,
+            zIndex: 1000,
+            boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1)'
           }}
         >
-          <h1 style={{ color: 'white', margin: 0, fontSize: '24px' }}>
-            Interview Platform
-          </h1>
-          <div style={{ display: 'flex', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{
+              width: '40px',
+              height: '40px',
+              background: 'linear-gradient(135deg, var(--primary-color), var(--primary-hover))',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'white',
+              fontSize: '20px',
+              fontWeight: 'bold'
+            }}>
+              AI
+            </div>
+            <Title level={4} style={{ margin: 0, color: 'var(--text-primary)' }}>
+              Interview Platform
+            </Title>
+          </div>
+          <div style={{ display: 'flex', gap: '16px' }}>
             <SavedInterviewsButton />
             <StartNewInterviewButton />
           </div>
         </Header>
-        <Content style={{ 
-          padding: '24px', 
-          height: 'calc(100vh - 68px)', 
-          overflow: 'auto',
-          flex: 1
+        <Content style={{
+          padding: '32px',
+          maxWidth: '1200px',
+          margin: '0 auto',
+          width: '100%',
+          display: 'flex',
+          flexDirection: 'column'
         }}>
-          <Tabs 
-            activeKey={activeTab}
-            onChange={handleTabChange}
-            items={tabItems}
-            size="large"
-            style={{ height: '100%' }}
-          />
+          <div className="animate-fade-in" style={{ flex: 1 }}>
+            <Tabs
+              activeKey={activeTab}
+              onChange={handleTabChange}
+              items={tabItems}
+              size="large"
+              style={{ height: '100%' }}
+              tabBarStyle={{ marginBottom: '24px' }}
+            />
+          </div>
         </Content>
       </Layout>
     </div>

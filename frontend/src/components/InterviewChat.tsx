@@ -1,6 +1,13 @@
-import { useState, useEffect, useRef } from 'react';
-import { Card, Input, Button, Progress, Typography, Space, message, Tag, Tabs } from 'antd';
-import { SendOutlined, ClockCircleOutlined, EditOutlined, AudioOutlined } from '@ant-design/icons';
+import React, { useState, useEffect, useRef } from 'react';
+import { Card, Button, Progress, Typography, Space, message, Tag, Row, Col, Statistic } from 'antd';
+import {
+  AudioOutlined,
+  ClockCircleOutlined,
+  SoundOutlined,
+  CheckCircleOutlined,
+  RightOutlined,
+  SendOutlined
+} from '@ant-design/icons';
 import { useAppSelector, useAppDispatch } from '../store/hooks';
 import { addAnswer, nextQuestion, completeInterview, startInterview as startInterviewAction } from '../store/candidateSlice';
 import { generateQuestions, scoreAnswers } from '../api/services';
@@ -8,82 +15,53 @@ import type { GeneratedQuestion, GenerateQuestionsResponse, ParsedResumeData, Sc
 import VoiceRecorder from './VoiceRecorder';
 import { saveInterviewToStorage, createSavedInterviewFromState } from '../utils/interviewStorage';
 
-const { TextArea } = Input;
-const { Text, Title } = Typography;
+const { Text, Title, Paragraph } = Typography;
+const { Countdown } = Statistic;
 
 interface InterviewChatProps {
   onInterviewComplete?: (score: number, summary: string) => void;
 }
 
+type InterviewState = 'IDLE' | 'GENERATING' | 'READING' | 'WAITING_TO_START' | 'RECORDING' | 'SUBMITTING' | 'SCORING' | 'COMPLETED';
+
 const InterviewChat: React.FC<InterviewChatProps> = ({ onInterviewComplete }) => {
   const dispatch = useAppDispatch();
   const candidate = useAppSelector((state) => state.candidate);
-  
+
+  // State
+  const [interviewState, setInterviewState] = useState<InterviewState>('IDLE');
   const [currentQuestion, setCurrentQuestion] = useState<GeneratedQuestion | null>(null);
+  const [timeLeft, setTimeLeft] = useState(0); // Used for both 30s and 120s timers
   const [answerText, setAnswerText] = useState('');
-  const [timeLeft, setTimeLeft] = useState(0);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [interviewStarted, setInterviewStarted] = useState(false);
   const [questionStartTime, setQuestionStartTime] = useState<number>(0);
-  const [isGeneratingQuestions, setIsGeneratingQuestions] = useState(false);
-  const [isScoringAnswers, setIsScoringAnswers] = useState(false);
-  const [inputMethod, setInputMethod] = useState<'text' | 'voice'>('text');
-  const [isVoiceRecording, setIsVoiceRecording] = useState(false);
-  const [shouldStopRecording, setShouldStopRecording] = useState(false);
-  
+
+  // Refs
   const timerRef = useRef<number | null>(null);
-  const autoSubmitRef = useRef<boolean>(false);
-  const answerTimesRef = useRef<number[]>([]);
+  const speechRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const answerTimesRef = useRef<number[]>([]); // To track time taken per question
 
-  // Format time as MM:SS
-  const formatTime = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-  };
+  // Constants
+  const START_TIMEOUT = 30; // 30 seconds to start recording
+  const ANSWER_TIMEOUT = 120; // 120 seconds to answer
 
-  // Calculate progress percentage (0-100)
-  const getProgressPercent = (): number => {
-    if (!currentQuestion) return 0;
-    const timeLimit = getTimeLimit(currentQuestion.difficulty);
-    return ((timeLimit - timeLeft) / timeLimit) * 100;
-  };
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopTimer();
+      stopTTS();
+    };
+  }, []);
 
-  // Get difficulty color
-  const getDifficultyColor = (difficulty: string): string => {
-    switch (difficulty) {
-      case 'easy': return 'green';
-      case 'medium': return 'orange'; 
-      case 'hard': return 'red';
-      default: return 'default';
-    }
-  };
-
-  // Start timer for current question
-  const startTimer = (timeLimit: number) => {
-    setTimeLeft(timeLimit);
-    setQuestionStartTime(Date.now());
-    
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-    }
+  // Timer Logic
+  const startTimer = (duration: number, onComplete: () => void) => {
+    stopTimer();
+    setTimeLeft(duration);
 
     timerRef.current = window.setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
-          console.log('Timer expired, triggering auto-submission');
-          // Auto-submit when time runs out
-          autoSubmitRef.current = true;
-          // Stop the timer first to prevent multiple auto-submissions
-          if (timerRef.current) {
-            clearInterval(timerRef.current);
-            timerRef.current = null;
-          }
-          // Use setTimeout to avoid stale closure issues
-          setTimeout(() => {
-            console.log('Executing auto-submission');
-            handleSubmitAnswer();
-          }, 0);
+          stopTimer();
+          onComplete();
           return 0;
         }
         return prev - 1;
@@ -91,39 +69,91 @@ const InterviewChat: React.FC<InterviewChatProps> = ({ onInterviewComplete }) =>
     }, 1000);
   };
 
-  // Stop timer
   const stopTimer = () => {
     if (timerRef.current) {
-      window.clearInterval(timerRef.current);
+      clearInterval(timerRef.current);
       timerRef.current = null;
     }
   };
 
-  // Get time limit based on difficulty
-  const getTimeLimit = (difficulty: string): number => {
-    switch (difficulty) {
-      case 'easy': return 20; // 20 seconds for easy
-      case 'medium': return 60; // 60 seconds for medium  
-      case 'hard': return 120; // 120 seconds for hard
-      default: return 60;
+  // TTS Logic
+  const playTTS = (text: string, isNewQuestion: boolean = false) => {
+    stopTTS();
+    console.log('PlayTTS called:', { text: text.substring(0, 50) + '...', isNewQuestion, currentState: interviewState });
+    
+    if ('speechSynthesis' in window) {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
+      utterance.lang = 'en-US';
+      
+      utterance.onend = () => {
+        console.log('TTS onend callback fired:', { isNewQuestion, currentState: interviewState });
+        // Use setTimeout to ensure state updates are processed
+        setTimeout(() => {
+          if (isNewQuestion) {
+            console.log('Transitioning to WAITING_TO_START');
+            setInterviewState('WAITING_TO_START');
+            startTimer(START_TIMEOUT, () => {
+              message.warning('Time expired to start answer. Moving to next question.');
+              handleSkipQuestion(); // This will save an answer and move to next question
+            });
+          }
+        }, 100);
+      };
+      
+      utterance.onerror = (error) => {
+        console.error('TTS Error:', error);
+        // If TTS fails and it's a new question, still transition to waiting state
+        if (isNewQuestion) {
+          console.log('TTS Error - transitioning to WAITING_TO_START');
+          setTimeout(() => {
+            setInterviewState('WAITING_TO_START');
+            startTimer(START_TIMEOUT, () => {
+              message.warning('Time expired to start answer. Moving to next question.');
+              handleSkipQuestion(); // This will save an answer and move to next question
+            });
+          }, 100);
+        }
+      };
+      
+      speechRef.current = utterance;
+      window.speechSynthesis.speak(utterance);
+    } else {
+      console.log('Speech synthesis not supported - fallback to waiting state');
+      // Fallback for browsers without speech synthesis
+      if (isNewQuestion) {
+        setTimeout(() => {
+          setInterviewState('WAITING_TO_START');
+          startTimer(START_TIMEOUT, () => {
+            message.warning('Time expired to start answer. Moving to next question.');
+            handleSkipQuestion(); // This will save an answer and move to next question
+          });
+        }, 2000); // Give 2 seconds as if speech was playing
+      }
     }
   };
 
-  // Start interview - generate questions and start
+  const stopTTS = () => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+  };
+
+  // Flow Control
   const handleStartInterview = async () => {
     if (!candidate.profile || !candidate.resumeText) {
-      message.error('Please upload resume first and ensure profile is complete.');
+      message.error('Please upload resume first.');
       return;
     }
 
-    setIsGeneratingQuestions(true);
-    
+    setInterviewState('GENERATING');
+
     try {
-      // Prepare the resume data for API call - we need to convert it back to the parsed format
       const resumeData: ParsedResumeData = {
         personal_info: {
           name: candidate.profile.name || "not found",
-          email: candidate.profile.email || "not found", 
+          email: candidate.profile.email || "not found",
           phone: candidate.profile.phone || "not found",
           linkedin: candidate.profile.linkedin || "not found",
           github: candidate.profile.github || "not found",
@@ -140,262 +170,276 @@ const InterviewChat: React.FC<InterviewChatProps> = ({ onInterviewComplete }) =>
       };
 
       const response: GenerateQuestionsResponse = await generateQuestions(resumeData);
-      
-      // Initialize Redux with generated questions  
       dispatch(startInterviewAction(response.questions));
-      
-      // Initialize answer times array
-      answerTimesRef.current = new Array(response.questions.length).fill(0);
-      
-      // Start with first question
-      const firstQuestion = response.questions[0];
-      setCurrentQuestion(firstQuestion);
-      setInterviewStarted(true);
-      startTimer(getTimeLimit(firstQuestion.difficulty));
+      answerTimesRef.current = new Array(response.questions.length).fill(0); // Initialize answer times
 
-      message.success('Interview started! Answer 6 questions to complete.');
+      // Start first question
+      loadQuestion(response.questions[0]);
     } catch (error) {
       console.error('Failed to generate questions:', error);
       message.error('Failed to start interview. Please try again.');
-    } finally {
-      setIsGeneratingQuestions(false);
+      setInterviewState('IDLE');
     }
   };
 
-  // Submit answer
-  const handleSubmitAnswer = async () => {
-    // For auto-submission (when timer expires), bypass the isSubmitting check
-    const isAutoSubmit = autoSubmitRef.current;
-    
-    console.log('handleSubmitAnswer called', { isAutoSubmit, isSubmitting, hasCurrentQuestion: !!currentQuestion });
-    
-    if (!currentQuestion || (!isAutoSubmit && isSubmitting) || !candidate.interviewProgress?.generatedQuestions) {
-      console.log('Early return from handleSubmitAnswer', { 
-        currentQuestion: !!currentQuestion, 
-        isAutoSubmit, 
-        isSubmitting, 
-        hasGeneratedQuestions: !!candidate.interviewProgress?.generatedQuestions 
-      });
-      return;
-    }
+  const loadQuestion = (question: GeneratedQuestion) => {
+    console.log('Loading question:', { question: question.question.substring(0, 50) + '...', currentState: interviewState });
+    setCurrentQuestion(question);
+    setAnswerText('');
+    setInterviewState('READING');
 
-    console.log('Proceeding with answer submission', { isAutoSubmit, isVoiceRecording });
-    
-    // Stop voice recording if it's active (without interfering with timer)
-    if (isVoiceRecording && !isAutoSubmit) {
-      setShouldStopRecording(true);
-      // Reset the flag quickly to avoid state issues
-      setTimeout(() => setShouldStopRecording(false), 50);
-    }
-    
-    setIsSubmitting(true);
+    // 1. Play TTS (onend callback will transition to WAITING_TO_START and start timer)
+    playTTS(question.question, true); // true indicates this is a new question
+  };
+
+  const handleStartRecording = () => {
+    stopTimer(); // Stop the 30s timer
+    stopTTS(); // Stop reading if still reading
+    setInterviewState('RECORDING');
+    setQuestionStartTime(Date.now());
+
+    // Start 120s answer timer
+    startTimer(ANSWER_TIMEOUT, () => {
+      // Timeout: Auto-submit what we have
+      message.info('Time limit reached. Submitting answer...');
+      // The VoiceRecorder component will handle the auto-submit via its own prop
+      // We just need to ensure the state is ready for submission.
+      // The VoiceRecorder's onTranscriptionComplete will be called with the final text.
+    });
+  };
+
+  const handleTranscriptionComplete = (text: string) => {
+    setAnswerText(text);
+    // Automatically submit after transcription is done
+    handleSubmitAnswer(text);
+  };
+
+  const handleSubmitAnswer = async (finalAnswer: string) => {
+    if (!currentQuestion) return;
+
     stopTimer();
+    setInterviewState('SUBMITTING');
+
+    const timeTaken = Math.floor((Date.now() - questionStartTime) / 1000);
+
+    // Save answer
+    dispatch(addAnswer({
+      questionId: currentQuestion.id.toString(),
+      question: currentQuestion.question,
+      answer: finalAnswer || "No answer provided (time expired)", // Ensure an answer is always saved
+      timestamp: new Date().toISOString(),
+      difficulty: currentQuestion.difficulty,
+      category: currentQuestion.category
+    }));
+
+    // Store time taken for this answer
+    const currentIndex = candidate.interviewProgress?.questionIndex || 0;
+    answerTimesRef.current[currentIndex] = timeTaken;
+
+    handleNextQuestion(false);
+  };
+
+  const handleSkipQuestion = () => {
+    if (!currentQuestion) return;
+    
+    stopTimer();
+    stopTTS();
+    
+    // Always save an answer when skipping, regardless of the current state
+    const skippedAnswer = interviewState === 'RECORDING' && answerText 
+      ? answerText + " (Question skipped by candidate)"
+      : "Question skipped by candidate";
+      
+    dispatch(addAnswer({
+      questionId: currentQuestion.id.toString(),
+      question: currentQuestion.question,
+      answer: skippedAnswer,
+      timestamp: new Date().toISOString(),
+      difficulty: currentQuestion.difficulty,
+      category: currentQuestion.category
+    }));
+    
+    message.info('Question skipped. Moving to next question.');
+    handleNextQuestion(true); // true = skipped
+  };
+
+  const handleNextQuestion = (skipped: boolean) => {
+    if (!candidate.interviewProgress?.generatedQuestions) return;
+
+    const currentIndex = candidate.interviewProgress.questionIndex;
+    const totalQuestions = candidate.interviewProgress.generatedQuestions.length;
+
+    dispatch(nextQuestion());
+
+    if (currentIndex + 1 >= totalQuestions) {
+      finishInterview();
+    } else {
+      const nextQ = candidate.interviewProgress.generatedQuestions[currentIndex + 1];
+      loadQuestion(nextQ);
+    }
+  };
+
+  const finishInterview = async () => {
+    console.log('Finishing interview - current state:', {
+      answersCount: candidate.interviewProgress?.answers.length || 0,
+      isComplete: candidate.interviewProgress?.isComplete,
+      answers: candidate.interviewProgress?.answers.slice(0, 2) || []
+    });
+    
+    setInterviewState('SCORING');
+    setCurrentQuestion(null);
+
+    // Prepare scoring payload
+    const allAnswers = [...(candidate.interviewProgress?.answers || [])];
+    // Note: The last answer is already added to redux in handleSubmitAnswer
+
+    const scoringPayload: ScoringPayload = {
+      candidate_info: {
+        name: candidate.profile?.name || 'Unknown Candidate',
+        technology: 'React.js' // Assuming a default technology for scoring
+      },
+      interview_data: (candidate.interviewProgress?.generatedQuestions || []).map((q, index) => {
+        const ans = allAnswers.find(a => a.questionId === q.id.toString());
+        return {
+          question_id: q.id,
+          question: q.question,
+          difficulty: q.difficulty,
+          category: q.category,
+          expected_topics: q.expected_topics,
+          answer: ans?.answer || "No answer provided",
+          time_taken: answerTimesRef.current[index] || 0,
+          max_time_allowed: q.difficulty === 'easy' ? 20 : q.difficulty === 'medium' ? 60 : 120 // Re-calculate max time
+        };
+      })
+    };
 
     try {
-      const timeTaken = Math.floor((Date.now() - questionStartTime) / 1000);
-      // Track time taken for potential future use
-      Math.min(timeTaken, getTimeLimit(currentQuestion.difficulty));
-      
-      // For auto-submission, use current answerText or empty string if no answer provided
-      const finalAnswer = answerText.trim() || (isAutoSubmit ? "No answer provided (time expired)" : "");
-      
-      // Save the answer to Redux
-      dispatch(addAnswer({
-        questionId: currentQuestion.id.toString(),
-        question: currentQuestion.question,
-        answer: finalAnswer,
-        timestamp: new Date().toISOString(),
-        difficulty: currentQuestion.difficulty,
-        category: currentQuestion.category
+      const scoringResult = await scoreAnswers(scoringPayload);
+
+      dispatch(completeInterview({
+        score: Math.round(scoringResult.final_score?.overall_score ?? 0),
+        summary: scoringResult.overall_feedback,
+        scoringResults: scoringResult
       }));
 
-      const currentIndex = candidate.interviewProgress.questionIndex;
-      const totalQuestions = candidate.interviewProgress.generatedQuestions.length;
-      
-      dispatch(nextQuestion());
-      
-      // Store time taken for this answer
-      answerTimesRef.current[currentIndex] = timeTaken;
-      
-      // Check if interview is complete
-      if (currentIndex + 1 >= totalQuestions) {
-        // Interview completed - all 6 questions done
-        stopTimer();
-        setCurrentQuestion(null);
-        setIsScoringAnswers(true);
-        
-        // Prepare all answers including the current one
-        const allAnswers = [...candidate.interviewProgress.answers, {
-          questionId: currentQuestion.id.toString(),
-          question: currentQuestion.question,
-          answer: finalAnswer,
-          timestamp: new Date().toISOString(),
-          difficulty: currentQuestion.difficulty,
-          category: currentQuestion.category
-        }];
-        
-        // Interview completed - prepare for scoring
+      setInterviewState('COMPLETED');
+      onInterviewComplete?.(
+        Math.round(scoringResult.final_score?.overall_score ?? 0),
+        scoringResult.overall_feedback
+      );
 
-        // Prepare scoring payload
-        const scoringPayload: ScoringPayload = {
-          candidate_info: {
-            name: candidate.profile?.name || 'Unknown Candidate',
-            technology: 'React.js'
-          },
-          interview_data: candidate.interviewProgress.generatedQuestions.map((question, index) => ({
-            question_id: question.id,
-            question: question.question,
-            difficulty: question.difficulty,
-            category: question.category,
-            expected_topics: question.expected_topics,
-            answer: allAnswers[index]?.answer || '',
-            time_taken: answerTimesRef.current[index] || 0,
-            max_time_allowed: getTimeLimit(question.difficulty)
-          }))
-        };
-
-        try {
-          console.log('Sending for scoring:', scoringPayload);
-          message.loading('Evaluating your answers...', 0);
-          
-          const scoringResult = await scoreAnswers(scoringPayload);
-          
-          message.destroy(); // Clear loading message
-          
-          dispatch(completeInterview({
-            score: Math.round(scoringResult.final_score?.overall_score ?? 0),
-            summary: scoringResult.overall_feedback,
-            scoringResults: scoringResult
-          }));
-          
-          message.success(`Interview completed! Your score: ${Math.round(scoringResult.final_score?.overall_score ?? 0)}/100`);
-          onInterviewComplete?.(
-            Math.round(scoringResult.final_score?.overall_score ?? 0), 
-            scoringResult.overall_feedback
-          );
-        } catch (error) {
-          console.error('Failed to score answers:', error);
-          message.destroy(); // Clear loading message
-          message.warning('Interview completed but scoring failed. Using fallback score.');
-          
-          // Fallback scoring - calculate basic score based on answer length and question count
-          const averageAnswerLength = allAnswers.reduce((sum, answer) => sum + answer.answer.length, 0) / allAnswers.length;
-          const baseScore = Math.min(100, Math.max(0, (averageAnswerLength / 50) * 60 + 20)); // Basic scoring logic
-          
-          dispatch(completeInterview({
-            score: Math.round(baseScore),
-            summary: `Interview completed with ${totalQuestions} questions answered. Scoring service temporarily unavailable.`
-          }));
-          
-          onInterviewComplete?.(Math.round(baseScore), `Interview completed with ${totalQuestions} questions answered.`);
-        } finally {
-          setIsScoringAnswers(false);
+      // Auto-save with timeout to ensure state updates are processed
+      setTimeout(() => {
+        const savedInterview = createSavedInterviewFromState(candidate);
+        console.log('Saving interview with answers:', {
+          candidateAnswers: candidate.interviewProgress?.answers?.length || 0,
+          savedInterviewAnswers: savedInterview?.interviewProgress.answers.length || 0,
+          isComplete: savedInterview?.interviewProgress.isComplete,
+          answers: savedInterview?.interviewProgress.answers.slice(0, 2) // Log first 2 answers
+        });
+        if (savedInterview) {
+          saveInterviewToStorage(savedInterview);
         }
-      } else {
-        // Move to next question
-        const nextQuestion = candidate.interviewProgress.generatedQuestions[currentIndex + 1];
-        setCurrentQuestion(nextQuestion);
-        setAnswerText('');
-        setInputMethod('text'); // Reset to text input for next question
-        
-        // The key prop on VoiceRecorder will handle transcript clearing automatically
-        
-        startTimer(getTimeLimit(nextQuestion.difficulty));
-        
-        const isAutoSubmit = autoSubmitRef.current;
-        autoSubmitRef.current = false;
-        
-        message.success(
-          isAutoSubmit 
-            ? `Time expired! Moving to question ${currentIndex + 2}...` 
-            : `Answer submitted! Question ${currentIndex + 2} of ${totalQuestions} loaded.`
-        );
-      }
+      }, 500); // Give 500ms for state updates to be processed
 
     } catch (error) {
-      console.error('Failed to submit answer:', error);
-      message.error('Failed to submit answer');
-      // Restart timer if submission failed
-      if (currentQuestion) {
-        startTimer(getTimeLimit(currentQuestion.difficulty));
-      }
-    } finally {
-      setIsSubmitting(false);  
+      console.error('Scoring failed:', error);
+      message.error('Scoring failed, but interview is saved.');
+      // Fallback scoring if API fails
+      const averageAnswerLength = allAnswers.reduce((sum, answer) => sum + answer.answer.length, 0) / allAnswers.length;
+      const baseScore = Math.min(100, Math.max(0, (averageAnswerLength / 50) * 60 + 20));
+      dispatch(completeInterview({
+        score: Math.round(baseScore),
+        summary: `Interview completed with ${scoringPayload.interview_data.length} questions answered. Scoring service temporarily unavailable.`
+      }));
+      setInterviewState('COMPLETED');
+
+      // Auto-save fallback case
+      setTimeout(() => {
+        const savedInterview = createSavedInterviewFromState(candidate);
+        console.log('Saving interview (fallback) with answers:', {
+          candidateAnswers: candidate.interviewProgress?.answers?.length || 0,
+          savedInterviewAnswers: savedInterview?.interviewProgress.answers.length || 0,
+          isComplete: savedInterview?.interviewProgress.isComplete,
+          answers: savedInterview?.interviewProgress.answers.slice(0, 2)
+        });
+        if (savedInterview) {
+          saveInterviewToStorage(savedInterview);
+        }
+      }, 500);
     }
   };
 
-  // Cleanup timer on unmount (don't interfere with voice recording)
-  useEffect(() => {
-    return () => {
-      stopTimer();
-    };
-  }, []);
-
-  // Handle auto-submission when timeLeft reaches 0
-  useEffect(() => {
-    if (timeLeft === 0 && currentQuestion && !isSubmitting && timerRef.current === null) {
-      // Safety net: if timer reached 0 but auto-submission didn't trigger
-      autoSubmitRef.current = true;
-      setTimeout(() => {
-        handleSubmitAnswer();
-      }, 100);
+  // Render Helpers
+  const getProgressPercent = () => {
+    if (interviewState === 'WAITING_TO_START') {
+      return (timeLeft / START_TIMEOUT) * 100;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timeLeft, currentQuestion, isSubmitting]);
-
-  // Check if interview should be restored - DISABLED to prevent auto-start
-  // This effect is now disabled to prevent auto-starting interviews on navigation
-  // Users must explicitly click "Start Interview" button to begin
-  useEffect(() => {
-    // Only restore if interview was explicitly started (not on page navigation)
-    // This prevents the infinite "Loading questions" issue
-    if (interviewStarted && candidate.interviewProgress?.startedAt && candidate.interviewProgress.generatedQuestions) {
-      // Try to restore interview state only if already started
-      const currentIndex = candidate.interviewProgress.questionIndex;
-      const questions = candidate.interviewProgress.generatedQuestions;
-      
-      if (currentIndex < questions.length && !candidate.interviewProgress.isComplete) {
-        const question = questions[currentIndex];
-        setCurrentQuestion(question);
-        startTimer(getTimeLimit(question.difficulty));
-      }
+    if (interviewState === 'RECORDING') {
+      return (timeLeft / ANSWER_TIMEOUT) * 100;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [interviewStarted, candidate.interviewProgress]);
+    return 0;
+  };
 
-  // Auto-save completed interviews
-  useEffect(() => {
-    if (candidate.interviewProgress?.isComplete && candidate.finalScore !== null && candidate.id) {
-      const savedInterview = createSavedInterviewFromState(candidate);
-      if (savedInterview) {
-        try {
-          saveInterviewToStorage(savedInterview);
-          console.log(`Interview for ${candidate.profile?.name} auto-saved successfully`);
-        } catch (error) {
-          console.error('Failed to auto-save interview:', error);
-        }
-      }
-    }
-  }, [candidate.interviewProgress?.isComplete, candidate.finalScore, candidate.id, candidate]);
+  const getTimerColor = () => {
+    if (timeLeft <= 10) return '#ff4d4f';
+    return '#1890ff';
+  };
 
-  // Check if interview is being scored
-  if (isScoringAnswers) {
+  // --- Views ---
+
+  if (interviewState === 'IDLE') {
     return (
-      <Card title="Evaluating Answers">
-        <div style={{ textAlign: 'center', padding: '40px' }}>
-          <Title level={3}>🤖 AI is evaluating your answers...</Title>
-          <Text>Please wait while we analyze your interview responses.</Text>
-          <div style={{ marginTop: '20px' }}>
-            <Progress type="circle" percent={75} format={() => '🧠'} />
+      <Card className="text-center" style={{ padding: '40px' }}>
+        <Space direction="vertical" size="large">
+          <Title level={2}>Ready for your Interview?</Title>
+          <Paragraph>
+            The interview consists of <strong>{candidate.interviewProgress?.generatedQuestions?.length || 6} questions</strong>.
+          </Paragraph>
+          <div style={{ textAlign: 'left', background: '#f8fafc', padding: '20px', borderRadius: '8px' }}>
+            <Title level={5}>Instructions:</Title>
+            <ul>
+              <li>Each question will be read aloud.</li>
+              <li>You have <strong>30 seconds</strong> to start recording your answer.</li>
+              <li>You have <strong>2 minutes</strong> to speak your answer.</li>
+            </ul>
           </div>
-        </div>
+          <Button
+            type="primary"
+            size="large"
+            onClick={handleStartInterview}
+            icon={<RightOutlined />}
+            style={{ minWidth: '200px', height: '50px', fontSize: '18px' }}
+            disabled={!candidate.profile || !candidate.resumeText}
+          >
+            Start Interview
+          </Button>
+          {(!candidate.profile || !candidate.resumeText) && (
+            <Text type="secondary">Please upload your resume first</Text>
+          )}
+        </Space>
       </Card>
     );
   }
 
-  // Check if interview is complete
-  if (candidate.interviewProgress?.isComplete) {
-    const scoringResults = candidate.interviewProgress.scoringResults as {
+  if (interviewState === 'GENERATING' || interviewState === 'SCORING') {
+    return (
+      <Card className="text-center" style={{ padding: '60px' }}>
+        <Space direction="vertical" size="large">
+          <div className="animate-pulse">
+            <Title level={3}>
+              {interviewState === 'GENERATING' ? 'Generating Questions...' : 'Analyzing Your Answers...'}
+            </Title>
+          </div>
+          <Progress type="circle" percent={75} status="active" />
+          <Text type="secondary">This uses AI and might take a few seconds.</Text>
+        </Space>
+      </Card>
+    );
+  }
+
+  if (interviewState === 'COMPLETED') {
+    const scoringResults = candidate.interviewProgress?.scoringResults as {
       total_questions?: number;
       questions_attempted?: number;
       final_score?: { content_score: number; overall_score: number };
@@ -404,7 +448,7 @@ const InterviewChat: React.FC<InterviewChatProps> = ({ onInterviewComplete }) =>
       strengths_summary?: string[];
       areas_for_improvement?: string[];
     } | undefined;
-    
+
     return (
       <Card title="Interview Complete">
         <div style={{ textAlign: 'center', padding: '40px' }}>
@@ -412,7 +456,7 @@ const InterviewChat: React.FC<InterviewChatProps> = ({ onInterviewComplete }) =>
           <Text>
             You have successfully answered all {scoringResults?.total_questions || 6} questions. Thank you for completing the interview!
           </Text>
-          
+
           {/* Final Score */}
           {candidate.finalScore !== null && (
             <div style={{ marginTop: '20px', padding: '16px', backgroundColor: '#f6ffed', borderRadius: '8px' }}>
@@ -421,7 +465,7 @@ const InterviewChat: React.FC<InterviewChatProps> = ({ onInterviewComplete }) =>
               </Title>
             </div>
           )}
-          
+
           {/* Recommendation */}
           {scoringResults?.recommendation && (
             <div style={{ marginTop: '16px', padding: '16px', backgroundColor: scoringResults.recommendation === 'conditional-hire' ? '#fff7e6' : '#f6ffed', borderRadius: '8px' }}>
@@ -483,188 +527,142 @@ const InterviewChat: React.FC<InterviewChatProps> = ({ onInterviewComplete }) =>
     );
   }
 
-  if (!interviewStarted) {
-    return (
-      <Card title="Ready to Start Interview?" style={{ textAlign: 'center', padding: '40px' }}>
-        <Space direction="vertical" size="large">
-          <div>
-            <Title level={4}>Technical Interview</Title>
-            <p>You will be asked exactly 6 questions.</p>
-            <p>Each question has a time limit. Answer will be auto-submitted when time expires.</p>
-          </div>
-          <Button 
-            type="primary" 
-            size="large" 
-            onClick={handleStartInterview}
-            disabled={!candidate.profile || !candidate.resumeText}
-            loading={isGeneratingQuestions}
-          >
-            {isGeneratingQuestions ? 'Generating Questions...' : 'Start Interview'}
-          </Button>
-          {(!candidate.profile || !candidate.resumeText) && (
-            <Text type="secondary">Please upload your resume first</Text>
-          )}
-        </Space>
-      </Card>
-    );
-  }
-
-  if (!currentQuestion) {
-    return (
-      <Card>
-        <div style={{ textAlign: 'center', padding: '40px' }}>
-          <Text>Loading question...</Text>
-        </div>
-      </Card>
-    );
-  }
-
+  // Active Interview View
   return (
-    <Card 
-      title={
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>Technical Interview</span>
-          <Space>
-            <Tag color={getDifficultyColor(currentQuestion.difficulty)}>
-              {currentQuestion.difficulty.toUpperCase()}
-            </Tag>
-            <Text strong>
-              Question {(candidate.interviewProgress?.questionIndex || 0) + 1}/{candidate.interviewProgress?.generatedQuestions?.length || 6}
-            </Text>
-          </Space>
-        </div>
-      }
-    >
-      {/* Timer and Progress */}
-      <div style={{ marginBottom: '24px', textAlign: 'center' }}>
-        <Space direction="vertical" size="small">
-          <Progress
-            type="circle"
-            percent={getProgressPercent()}
-            format={() => (
-              <div style={{ textAlign: 'center' }}>
-                <ClockCircleOutlined style={{ color: timeLeft <= 10 ? '#ff4d4f' : '#1890ff' }} />
-                <div style={{ 
-                  fontSize: '14px', 
-                  fontWeight: 'bold',
-                  color: timeLeft <= 10 ? '#ff4d4f' : '#1890ff'
-                }}>
-                  {formatTime(timeLeft)}
-                </div>
-              </div>
-            )}
-            strokeColor={timeLeft <= 10 ? '#ff4d4f' : '#1890ff'}
-            size={80}
-          />
-          <Text type={timeLeft <= 10 ? 'danger' : 'secondary'}>
-            {timeLeft <= 10 ? 'Time running out!' : 'Time remaining'}
-          </Text>
-        </Space>
+    <div style={{ maxWidth: '800px', margin: '0 auto' }}>
+      {/* Progress Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+        <Title level={4} style={{ margin: 0 }}>
+          Question {(candidate.interviewProgress?.questionIndex || 0) + 1} of {candidate.interviewProgress?.generatedQuestions?.length || 6}
+        </Title>
+        <Tag color="blue" style={{ fontSize: '14px', padding: '4px 12px' }}>
+          {currentQuestion?.category.toUpperCase()}
+        </Tag>
       </div>
 
-      {/* Question */}
-      <Card 
-        style={{ 
-          marginBottom: '24px', 
-          backgroundColor: '#f8f9fa',
-          border: '1px solid #e9ecef'
+      <Progress
+        percent={((candidate.interviewProgress?.questionIndex || 0) / (candidate.interviewProgress?.generatedQuestions?.length || 6)) * 100}
+        showInfo={false}
+        strokeColor="var(--primary-color)"
+        style={{ marginBottom: '32px' }}
+      />
+
+      {/* Question Card */}
+      <Card
+        style={{
+          marginBottom: '24px',
+          background: 'linear-gradient(to right, #f8fafc, #fff)',
+          borderLeft: '4px solid var(--primary-color)'
         }}
       >
-        <Title level={5} style={{ margin: 0 }}>
-          {currentQuestion.question}
+        <Title level={3} style={{ fontWeight: 400 }}>
+          {currentQuestion?.question}
         </Title>
+        <Button
+          type="text"
+          icon={<SoundOutlined />}
+          onClick={() => playTTS(currentQuestion?.question || '', false)}
+          disabled={interviewState === 'RECORDING' || interviewState === 'SUBMITTING'}
+        >
+          Replay Audio
+        </Button>
       </Card>
 
-      {/* Answer Input */}
-      <div style={{ marginBottom: '16px' }}>
-        <Tabs
-          activeKey={inputMethod}
-          onChange={(key) => setInputMethod(key as 'text' | 'voice')}
-          items={[
-            {
-              key: 'text',
-              label: (
-                <Space>
-                  <EditOutlined />
-                  Text Input
-                </Space>
-              ),
-              children: (
-                <TextArea
-                  value={answerText}
-                  onChange={(e) => setAnswerText(e.target.value)}
-                  placeholder="Type your answer here..."
-                  rows={6}
-                  disabled={isSubmitting}
-                  style={{ fontSize: '14px' }}
-                />
-              ),
-            },
-            {
-              key: 'voice',
-              label: (
-                <Space>
-                  <AudioOutlined />
-                  Voice Input
-                </Space>
-              ),
-              children: (
-                <VoiceRecorder
-                  key={currentQuestion?.id || 'default'} // Force fresh instance for each question
-                  onTranscriptionComplete={(text) => {
-                    setAnswerText(text);
-                    setInputMethod('text'); // Switch to text view to show the transcribed text
-                  }}
-                  disabled={isSubmitting}
-                  placeholder="Click the microphone and speak your answer..."
-                  autoSubmitOnTimeout={true}
-                  timeLeft={timeLeft}
-                  onRecordingStateChange={setIsVoiceRecording}
-                  shouldStopRecording={shouldStopRecording}
-                />
-              ),
-            },
-          ]}
-        />
-      </div>
+      {/* Interaction Area */}
+      <Card style={{ textAlign: 'center', padding: '40px' }}>
+        {interviewState === 'READING' && (
+          <Space direction="vertical" size="large">
+            <Title level={4}>Listening to the question...</Title>
+            <Progress type="circle" percent={100} status="active" format={() => <SoundOutlined style={{ fontSize: '32px' }} />} />
+            <Text type="secondary">Please wait for the question to finish reading.</Text>
+          </Space>
+        )}
 
-      {/* Submit Button */}
-      <div style={{ textAlign: 'right' }}>
-        <Space>
-          <Button
-            onClick={() => setInputMethod(inputMethod === 'text' ? 'voice' : 'text')}
-            disabled={isSubmitting}
-          >
-            Switch to {inputMethod === 'text' ? 'Voice' : 'Text'}
-          </Button>
-          <Button
-            type="primary"
-            icon={<SendOutlined />}
-            onClick={handleSubmitAnswer}
-            loading={isSubmitting}
-            disabled={!answerText.trim() && timeLeft > 5 && !isVoiceRecording}
-            size="large"
-          >
-            {isSubmitting ? 'Submitting...' : isVoiceRecording ? 'Submit Answer' : timeLeft <= 5 && !answerText.trim() ? 'Submit Empty (Auto in ' + timeLeft + 's)' : 'Submit Answer'}
-          </Button>
-        </Space>
-      </div>
+        {interviewState === 'WAITING_TO_START' && (
+          <Space direction="vertical" size="large">
+            <div style={{ position: 'relative', display: 'inline-block' }}>
+              <Progress
+                type="circle"
+                percent={(timeLeft / START_TIMEOUT) * 100}
+                width={120}
+                format={() => timeLeft}
+                strokeColor={getTimerColor()}
+              />
+              <div style={{ marginTop: '16px', fontWeight: 'bold', color: getTimerColor() }}>
+                Seconds to Start
+              </div>
+            </div>
 
-      {/* Progress indicator */}
-      <div style={{ marginTop: '16px', textAlign: 'center' }}>
-        <Text type="secondary">
-          Progress: {candidate.interviewProgress?.questionIndex || 0} of {candidate.interviewProgress?.generatedQuestions?.length || 6} questions completed
-        </Text>
-        <div style={{ marginTop: '8px' }}>
-          <Progress 
-            percent={(candidate.interviewProgress?.questionIndex || 0) / (candidate.interviewProgress?.generatedQuestions?.length || 6) * 100} 
-            size="small"
-            strokeColor="#1890ff"
-            format={() => `${candidate.interviewProgress?.questionIndex || 0}/${candidate.interviewProgress?.generatedQuestions?.length || 6}`}
-          />
-        </div>
-      </div>
-    </Card>
+            <Space size="large" wrap>
+              <Button
+                type="primary"
+                size="large"
+                icon={<AudioOutlined />}
+                onClick={handleStartRecording}
+                style={{ height: '60px', fontSize: '20px', padding: '0 40px', borderRadius: '30px' }}
+                className="animate-pulse"
+              >
+                Start Recording Answer
+              </Button>
+              <Button
+                size="large"
+                onClick={handleSkipQuestion}
+                style={{ height: '60px', fontSize: '16px', padding: '0 30px', borderRadius: '30px' }}
+              >
+                Skip Question →
+              </Button>
+            </Space>
+          </Space>
+        )}
+
+        {interviewState === 'RECORDING' && (
+          <Space direction="vertical" size="large" style={{ width: '100%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fff1f0', padding: '12px 24px', borderRadius: '8px', border: '1px solid #ffa39e' }}>
+              <Space>
+                <div style={{ width: '12px', height: '12px', background: '#ff4d4f', borderRadius: '50%' }} className="animate-pulse" />
+                <Text strong style={{ color: '#cf1322' }}>Recording...</Text>
+              </Space>
+              <Space>
+                <ClockCircleOutlined />
+                <Text strong>{timeLeft}s remaining</Text>
+              </Space>
+            </div>
+
+            <VoiceRecorder
+              key={currentQuestion?.id || 'default'} // Force fresh instance for each question
+              onTranscriptionComplete={handleTranscriptionComplete}
+              autoSubmitOnTimeout={true}
+              timeLeft={timeLeft} // Pass timeLeft to VoiceRecorder for its internal logic
+              placeholder="Listening..."
+              autoStart={true} // Assuming VoiceRecorder can be updated to support this
+            />
+
+            <Row gutter={16} justify="center" style={{ width: '100%' }}>
+              <Col>
+                <Text type="secondary">Your answer will be automatically submitted when the timer runs out.</Text>
+              </Col>
+            </Row>
+            
+            <Button
+              type="default"
+              size="large"
+              onClick={handleSkipQuestion}
+              style={{ height: '50px', fontSize: '16px', padding: '0 30px', borderRadius: '25px', marginTop: '16px' }}
+            >
+              Skip to Next Question →
+            </Button>
+          </Space>
+        )}
+
+        {interviewState === 'SUBMITTING' && (
+          <Space direction="vertical" size="large">
+            <Title level={4}>Submitting your answer...</Title>
+            <Progress type="circle" percent={100} status="active" format={() => <SendOutlined style={{ fontSize: '32px' }} />} />
+            <Text type="secondary">Please wait.</Text>
+          </Space>
+        )}
+      </Card>
+    </div>
   );
 };
 

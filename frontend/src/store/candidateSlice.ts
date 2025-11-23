@@ -1,5 +1,6 @@
 import { createSlice } from '@reduxjs/toolkit';
 import type { PayloadAction } from '@reduxjs/toolkit';
+import type { ScoringResponse, GeneratedQuestion } from '../api/services';
 
 export interface CandidateProfile {
   name: string;
@@ -24,14 +25,6 @@ export interface CandidateProfile {
   skills?: string[];
 }
 
-export interface GeneratedQuestion {
-  id: number;
-  question: string;
-  difficulty: "easy" | "medium" | "hard";
-  category: string;
-  expected_topics: string[];
-}
-
 export interface InterviewAnswer {
   questionId: string;
   question: string;
@@ -48,7 +41,7 @@ export interface InterviewProgress {
   startedAt?: string;
   completedAt?: string;
   generatedQuestions?: GeneratedQuestion[];
-  scoringResults?: object; // Store detailed scoring results
+  scoringResults?: ScoringResponse; // Store detailed scoring results
 }
 
 interface CandidateState {
@@ -98,8 +91,8 @@ const candidateSlice = createSlice({
     setProfile: (state, action: PayloadAction<CandidateProfile>) => {
       state.profile = action.payload;
       state.isProfileComplete = !!(
-        action.payload.name && 
-        action.payload.email && 
+        action.payload.name &&
+        action.payload.email &&
         action.payload.phone
       );
       state.lastUpdated = new Date().toISOString();
@@ -108,8 +101,8 @@ const candidateSlice = createSlice({
       if (state.profile) {
         state.profile = { ...state.profile, ...action.payload };
         state.isProfileComplete = !!(
-          state.profile.name && 
-          state.profile.email && 
+          state.profile.name &&
+          state.profile.email &&
           state.profile.phone
         );
         state.lastUpdated = new Date().toISOString();
@@ -171,7 +164,7 @@ const candidateSlice = createSlice({
       state.interviewProgress.questionIndex += 1;
       state.lastUpdated = new Date().toISOString();
     },
-    completeInterview: (state, action: PayloadAction<{ score: number; summary: string; scoringResults?: object }>) => {
+    completeInterview: (state, action: PayloadAction<{ score: number; summary: string; scoringResults?: ScoringResponse }>) => {
       state.interviewProgress.isComplete = true;
       state.interviewProgress.completedAt = new Date().toISOString();
       state.finalScore = action.payload.score;
@@ -203,10 +196,10 @@ const candidateSlice = createSlice({
   },
 });
 
-export const { 
+export const {
   setCandidateId,
-  setProfile, 
-  updateProfile, 
+  setProfile,
+  updateProfile,
   setResumeFile,
   setResumeData,
   setResumeBase64,
@@ -218,7 +211,7 @@ export const {
   completeInterview,
   saveCurrentInterview,
   startNewInterview,
-  clearCandidate 
+  clearCandidate
 } = candidateSlice.actions;
 
 export default candidateSlice.reducer;

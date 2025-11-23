@@ -6,7 +6,7 @@ This document explains how the resume parsing API has been integrated into the a
 ## API Integration Details
 
 ### API Endpoint
-- **URL**: `https://resume-parser-api-oxht.onrender.com/parse-resume`
+- **URL**: `http://52.66.208.231:8002/parse-resume`
 - **Method**: POST
 - **Content-Type**: multipart/form-data
 - **File Parameter**: `file`

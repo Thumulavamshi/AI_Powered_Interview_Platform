@@ -5,28 +5,59 @@ export interface ParsedResumeData {
     name: string;
     email: string;
     phone: string;
-    linkedin: string;
-    github: string;
-    website: string;
+    linkedin: string | null;
+    github: string | null;
+    website: string | null;
+    location: string | null;
   };
-  other_info: {
-    education: Array<{
-      institution: string;
-    }>;
-    experience: Array<{
-      key: string;
-      start: string;
-      end: string;
-      description: string[];
-    }>;
-    projects: Array<{
-      title: string;
-      description: string[];
-    }>;
-    extra_info: {
-      skills: string[];
-    };
+  education: Array<{
+    institution: string;
+    degree: string;
+    field_of_study: string | null;
+    grade: string | null;
+    start_date: string;
+    end_date: string | null;
+    achievements: string | null;
+  }>;
+  experience: Array<{
+    company: string;
+    role: string;
+    start_date: string;
+    end_date: string | null;
+    duration: string | null;
+    location: string | null;
+    responsibilities: string[];
+    technologies_used: string[];
+    key_achievements: string | null;
+  }>;
+  projects: Array<{
+    title: string;
+    description: string;
+    role: string;
+    technologies: string[];
+    key_features: string[];
+    challenges_solved: string[];
+    link: string | null;
+    duration: string;
+  }>;
+  skills: {
+    languages: string[];
+    frameworks: string[];
+    databases: string[];
+    tools: string[];
+    cloud_platforms: string[];
+    other: string[];
   };
+  certifications: Array<{
+    name: string;
+    issuer: string;
+    issue_date: string | null;
+    expiry_date: string | null;
+    credential_id: string | null;
+  }>;
+  achievements: string[];
+  publications: string | null;
+  languages: string | null;
 }
 
 export interface ResumeUploadResponse {
@@ -131,7 +162,7 @@ export interface ScoringResponse {
 // Generate questions for interview
 export const generateQuestions = async (parsedResumeData: ParsedResumeData): Promise<GenerateQuestionsResponse> => {
   try {
-    const response = await fetch('https://resume-parser-api-oxht.onrender.com/generate-questions', {
+    const response = await fetch('http://52.66.208.231:8002/generate-questions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -154,7 +185,7 @@ export const generateQuestions = async (parsedResumeData: ParsedResumeData): Pro
 // Score interview answers
 export const scoreAnswers = async (payload: ScoringPayload): Promise<ScoringResponse> => {
   try {
-    const response = await fetch('https://resume-parser-api-oxht.onrender.com/score-answers', {
+    const response = await fetch('http://52.66.208.231:8002/score-answers', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -197,7 +228,7 @@ export const uploadResume = async (file: File): Promise<ResumeUploadResponse> =>
     formData.append('file', file);
 
     // Call the resume parsing API
-    const parseResponse = await fetch('https://resume-parser-api-oxht.onrender.com/parse-resume', {
+    const parseResponse = await fetch('http://52.66.208.231:8002/parse-resume', {
       method: 'POST',
       body: formData,
     });
@@ -208,19 +239,41 @@ export const uploadResume = async (file: File): Promise<ResumeUploadResponse> =>
 
     const parsedData: ParsedResumeData = await parseResponse.json();
 
+    // Helper to flatten skills object
+    const flattenSkills = (skillsObj: ParsedResumeData['skills']): string[] => {
+      if (!skillsObj) return [];
+      return [
+        ...(skillsObj.languages || []),
+        ...(skillsObj.frameworks || []),
+        ...(skillsObj.databases || []),
+        ...(skillsObj.tools || []),
+        ...(skillsObj.cloud_platforms || []),
+        ...(skillsObj.other || [])
+      ];
+    };
 
     // Transform the parsed data to match our interface
     const extractedData = {
-      name: parsedData.personal_info.name !== "not found" ? parsedData.personal_info.name : "",
-      email: parsedData.personal_info.email !== "not found" ? parsedData.personal_info.email : "",
-      phone: parsedData.personal_info.phone !== "not found" ? parsedData.personal_info.phone : "",
-      linkedin: parsedData.personal_info.linkedin !== "not found" ? parsedData.personal_info.linkedin : undefined,
-      github: parsedData.personal_info.github !== "not found" ? parsedData.personal_info.github : undefined,
-      website: parsedData.personal_info.website !== "not found" ? parsedData.personal_info.website : undefined,
-      education: parsedData.other_info.education || [],
-      experience: parsedData.other_info.experience || [],
-      projects: parsedData.other_info.projects || [],
-      skills: parsedData.other_info.extra_info?.skills || []
+      name: parsedData?.personal_info?.name && parsedData.personal_info.name !== "not found" ? parsedData.personal_info.name : "",
+      email: parsedData?.personal_info?.email && parsedData.personal_info.email !== "not found" ? parsedData.personal_info.email : "",
+      phone: parsedData?.personal_info?.phone && parsedData.personal_info.phone !== "not found" ? parsedData.personal_info.phone : "",
+      linkedin: parsedData?.personal_info?.linkedin && parsedData.personal_info.linkedin !== "not found" ? parsedData.personal_info.linkedin : undefined,
+      github: parsedData?.personal_info?.github && parsedData.personal_info.github !== "not found" ? parsedData.personal_info.github : undefined,
+      website: parsedData?.personal_info?.website && parsedData.personal_info.website !== "not found" ? parsedData.personal_info.website : undefined,
+      education: parsedData?.education?.map(edu => ({
+        institution: edu.institution
+      })) || [],
+      experience: parsedData?.experience?.map(exp => ({
+        key: exp.company,
+        start: exp.start_date,
+        end: exp.end_date || 'Present',
+        description: exp.responsibilities || []
+      })) || [],
+      projects: parsedData?.projects?.map(proj => ({
+        title: proj.title,
+        description: proj.description ? [proj.description] : []
+      })) || [],
+      skills: flattenSkills(parsedData?.skills)
     };
 
     // Generate a candidate ID

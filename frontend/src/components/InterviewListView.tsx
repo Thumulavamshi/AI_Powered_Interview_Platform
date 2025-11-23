@@ -42,6 +42,27 @@ const InterviewListView: React.FC<InterviewListViewProps> = ({ onSelectInterview
     loadInterviews();
   }, []);
 
+  // Refresh interviews when the page becomes visible (user switches tabs)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        loadInterviews();
+      }
+    };
+
+    const handleFocus = () => {
+      loadInterviews();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, []);
+
   // Filter interviews based on search query
   useEffect(() => {
     if (searchQuery.trim() === '') {
@@ -168,15 +189,25 @@ const InterviewListView: React.FC<InterviewListViewProps> = ({ onSelectInterview
           </Col>
         </Row>
 
-        {/* Search Bar */}
-        <Search
-          placeholder="Search interviews by candidate name or email..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          style={{ maxWidth: 400 }}
-          prefix={<SearchOutlined />}
-          allowClear
-        />
+        {/* Search Bar and Refresh */}
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <Search
+            placeholder="Search interviews by candidate name or email..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{ maxWidth: 400, flex: 1 }}
+            prefix={<SearchOutlined />}
+            allowClear
+          />
+          <Button
+            type="default"
+            onClick={loadInterviews}
+            loading={loading}
+            style={{ height: '32px' }}
+          >
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Interview List */}

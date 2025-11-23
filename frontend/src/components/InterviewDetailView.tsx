@@ -1,7 +1,7 @@
 import React from 'react';
 import { Row, Col, Card, Typography, Space, Tag, Alert, Button } from 'antd';
-import { 
-  UserOutlined, 
+import {
+  UserOutlined,
   CheckCircleOutlined,
   TrophyOutlined,
   ArrowLeftOutlined
@@ -19,40 +19,30 @@ interface InterviewDetailViewProps {
 }
 
 const InterviewDetailView: React.FC<InterviewDetailViewProps> = ({ interview, onBack }) => {
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return 'Not available';
+
+  const formatDate = (dateString: string | undefined) => {
+    if (!dateString) return 'N/A';
     return new Date(dateString).toLocaleString();
   };
 
-  const scoringResults = interview.interviewProgress.scoringResults as {
-    overall_score: number;
-    detailed_scores: Array<{
-      question_id: number;
-      score: number;
-      feedback: string;
-      strengths: string[];
-      weaknesses: string[];
-    }>;
-    summary: string;
-  } | undefined;
+  const scoringResults = interview.interviewProgress.scoringResults;
 
   return (
-    <div style={{ padding: '24px', backgroundColor: '#f5f5f5', minHeight: '100vh' }}>
-      {/* Header */}
-      <div style={{ 
-        marginBottom: '24px', 
-        display: 'flex', 
-        justifyContent: 'space-between', 
+    <div>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
         alignItems: 'center',
         backgroundColor: 'white',
         padding: '20px',
         borderRadius: '8px',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+        marginBottom: '24px'
       }}>
         <div>
           <Space>
-            <Button 
-              type="text" 
+            <Button
+              type="text"
               icon={<ArrowLeftOutlined />}
               onClick={onBack}
               style={{ marginRight: '12px' }}
@@ -109,9 +99,9 @@ const InterviewDetailView: React.FC<InterviewDetailViewProps> = ({ interview, on
                     Duration: {
                       interview.interviewProgress.startedAt && interview.interviewProgress.completedAt
                         ? Math.round(
-                            (new Date(interview.interviewProgress.completedAt).getTime() - 
-                             new Date(interview.interviewProgress.startedAt).getTime()) / (1000 * 60)
-                          ) + ' minutes'
+                          (new Date(interview.interviewProgress.completedAt).getTime() -
+                            new Date(interview.interviewProgress.startedAt).getTime()) / (1000 * 60)
+                        ) + ' minutes'
                         : 'N/A'
                     }
                   </Text>
@@ -120,7 +110,7 @@ const InterviewDetailView: React.FC<InterviewDetailViewProps> = ({ interview, on
             </Card>
 
             {/* Resume Viewer */}
-            <ResumeViewer 
+            <ResumeViewer
               resumeBase64={interview.resumeBase64}
               fileName={interview.resumeFile?.name}
               fileSize={interview.resumeFile?.size}
@@ -143,7 +133,7 @@ const InterviewDetailView: React.FC<InterviewDetailViewProps> = ({ interview, on
             />
 
             {/* Q&A Display */}
-            <InterviewQADisplay 
+            <InterviewQADisplay
               answers={interview.interviewProgress.answers}
               scoringResults={scoringResults}
               isInterviewComplete={interview.interviewProgress.isComplete}
@@ -151,7 +141,7 @@ const InterviewDetailView: React.FC<InterviewDetailViewProps> = ({ interview, on
 
             {/* Summary Card */}
             {interview.summary && (
-              <Card 
+              <Card
                 title={
                   <Space>
                     <TrophyOutlined />

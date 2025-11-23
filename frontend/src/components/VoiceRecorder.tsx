@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Button, Space, Typography, Card, Progress, Spin } from 'antd';
-import { 
-  AudioOutlined, 
-  LoadingOutlined, 
+import {
+  AudioOutlined,
+  LoadingOutlined,
   CheckCircleOutlined,
-  StopOutlined 
+  StopOutlined
 } from '@ant-design/icons';
 
 // Type declarations for Web Speech API
@@ -51,6 +51,7 @@ interface VoiceRecorderProps {
   timeLeft?: number;
   onRecordingStateChange?: (isRecording: boolean) => void;
   shouldStopRecording?: boolean;
+  autoStart?: boolean;
 }
 
 const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
@@ -60,7 +61,8 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
   autoSubmitOnTimeout = false,
   timeLeft = 0,
   onRecordingStateChange,
-  shouldStopRecording = false
+  shouldStopRecording = false,
+  autoStart = false
 }) => {
   const [isListening, setIsListening] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -78,7 +80,7 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
   // Check network connectivity
   const checkNetworkConnectivity = async (): Promise<boolean> => {
     try {
-      await fetch('https://www.google.com/favicon.ico', { 
+      await fetch('https://www.google.com/favicon.ico', {
         method: 'HEAD',
         mode: 'no-cors',
         cache: 'no-cache'
@@ -93,16 +95,16 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
   useEffect(() => {
     // Check if we're on HTTPS or localhost (required for speech recognition)
     const isSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost';
-    
+
     if (!isSecure && window.location.hostname !== '127.0.0.1') {
       setError('Speech recognition requires HTTPS. Please use HTTPS or localhost for development.');
       return;
     }
-    
+
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       speechRecognition.current = new SpeechRecognition();
-      
+
       if (speechRecognition.current) {
         speechRecognition.current.continuous = true;
         speechRecognition.current.interimResults = true;
@@ -115,22 +117,22 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
         };
 
         speechRecognition.current.onresult = (event: SpeechRecognitionEvent) => {
-        let interimTranscript = '';
-        let finalText = '';
+          let interimTranscript = '';
+          let finalText = '';
 
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          const transcript = event.results[i][0].transcript;
-          if (event.results[i].isFinal) {
-            finalText += transcript;
-          } else {
-            interimTranscript += transcript;
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            const transcript = event.results[i][0].transcript;
+            if (event.results[i].isFinal) {
+              finalText += transcript;
+            } else {
+              interimTranscript += transcript;
+            }
           }
-        }
 
-        setTranscript(interimTranscript);
-        if (finalText) {
-          setFinalTranscript(prev => prev + finalText);
-        }
+          setTranscript(interimTranscript);
+          if (finalText) {
+            setFinalTranscript(prev => prev + finalText);
+          }
         };
 
         speechRecognition.current.onend = () => {
@@ -149,7 +151,7 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
 
         speechRecognition.current.onerror = (event: SpeechRecognitionErrorEvent) => {
           console.error('Speech Recognition Error:', event.error, event.message);
-          
+
           let errorMessage = '';
           switch (event.error) {
             case 'network':
@@ -170,7 +172,7 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
             default:
               errorMessage = `Speech recognition error: ${event.error}. Please try again.`;
           }
-          
+
           setError(errorMessage);
           setIsListening(false);
         };
@@ -192,10 +194,10 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
     if (analyser.current) {
       const dataArray = new Uint8Array(analyser.current.frequencyBinCount);
       analyser.current.getByteFrequencyData(dataArray);
-      
+
       const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
       setAudioLevel(Math.min(100, (average / 255) * 100 * 3)); // Amplify for better visual
-      
+
       animationFrame.current = requestAnimationFrame(updateAudioLevel);
     }
   };
@@ -209,7 +211,7 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
   const handleStopRecording = useCallback(() => {
     stopRecording();
     setIsProcessing(true);
-    
+
     // Simulate processing time for better UX
     setTimeout(() => {
       const fullTranscript = finalTranscript + transcript;
@@ -226,8 +228,6 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
       handleStopRecording();
     }
   }, [timeLeft, autoSubmitOnTimeout, finalTranscript, transcript, handleStopRecording]);
-
-  // Component will be remounted with fresh state for each question due to key prop
 
   // Handle external stop recording request
   useEffect(() => {
@@ -269,7 +269,7 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
       analyser.current = audioContext.current.createAnalyser();
       analyser.current.fftSize = 256;
       source.connect(analyser.current);
-      
+
       // Start audio level monitoring
       updateAudioLevel();
 
@@ -277,10 +277,10 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
       setTranscript('');
       setFinalTranscript('');
       setError(null);
-      
+
       // Add a small delay to prevent rapid-fire starts that can cause network errors
       await new Promise(resolve => setTimeout(resolve, 100));
-      
+
       // Start speech recognition
       speechRecognition.current.start();
     } catch (err) {
@@ -295,6 +295,18 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
       }
     }
   };
+
+  // Auto-start recording if enabled
+  useEffect(() => {
+    if (autoStart && !isListening && !isProcessing && !transcript && !finalTranscript) {
+      // Small delay to ensure component is fully mounted and ready
+      const timer = setTimeout(() => {
+        startRecording();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoStart]);
 
   const handleClearTranscript = () => {
     setTranscript('');
@@ -316,9 +328,9 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
   const fullTranscript = finalTranscript + transcript;
 
   return (
-    <Card 
-      size="small" 
-      style={{ 
+    <Card
+      size="small"
+      style={{
         border: isListening ? '2px solid #1890ff' : '1px solid #d9d9d9',
         backgroundColor: isListening ? '#f6ffed' : '#fafafa'
       }}
@@ -332,20 +344,20 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
             onClick={isListening ? handleStopRecording : startRecording}
             disabled={disabled || isProcessing}
             size="large"
-            style={{ 
-              borderRadius: '50%', 
-              width: '60px', 
+            style={{
+              borderRadius: '50%',
+              width: '60px',
               height: '60px',
               boxShadow: isListening ? '0 0 20px rgba(24, 144, 255, 0.3)' : 'none'
             }}
           />
-          
+
           {/* Audio Level Indicator */}
           {isListening && (
             <div style={{ width: '100px' }}>
-              <Progress 
-                percent={audioLevel} 
-                showInfo={false} 
+              <Progress
+                percent={audioLevel}
+                showInfo={false}
                 strokeColor={{
                   '0%': '#87d068',
                   '50%': '#ffe58f',
@@ -366,11 +378,11 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
 
         {/* Live Transcript Display */}
         {(isListening || fullTranscript) && (
-          <div 
-            style={{ 
-              minHeight: '80px', 
-              padding: '12px', 
-              backgroundColor: 'white', 
+          <div
+            style={{
+              minHeight: '80px',
+              padding: '12px',
+              backgroundColor: 'white',
               border: '1px solid #d9d9d9',
               borderRadius: '6px',
               fontSize: '14px',
@@ -385,17 +397,17 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
                 </Text>
               </div>
             )}
-            
+
             {finalTranscript && (
               <Text>{finalTranscript}</Text>
             )}
-            
+
             {transcript && (
               <Text type="secondary" style={{ opacity: 0.7 }}>
                 {transcript}
               </Text>
             )}
-            
+
             {!fullTranscript && !isListening && (
               <Text type="secondary" style={{ fontStyle: 'italic' }}>
                 {placeholder}
@@ -407,16 +419,16 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
         {/* Action Buttons */}
         {fullTranscript && !isListening && (
           <Space style={{ width: '100%', justifyContent: 'center' }}>
-            <Button 
-              size="small" 
+            <Button
+              size="small"
               onClick={handleClearTranscript}
               disabled={isProcessing}
             >
               Clear
             </Button>
-            <Button 
-              type="primary" 
-              size="small" 
+            <Button
+              type="primary"
+              size="small"
               icon={<CheckCircleOutlined />}
               onClick={() => onTranscriptionComplete(fullTranscript.trim())}
               disabled={isProcessing}
@@ -438,9 +450,9 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
 
         {/* Error Display */}
         {error && (
-          <div style={{ 
-            padding: '12px', 
-            backgroundColor: '#fff2f0', 
+          <div style={{
+            padding: '12px',
+            backgroundColor: '#fff2f0',
             border: '1px solid #ffccc7',
             borderRadius: '4px',
             textAlign: 'center'
@@ -449,9 +461,9 @@ const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
               {error}
             </Text>
             {error.includes('Network error') || error.includes('network') ? (
-              <Button 
-                size="small" 
-                type="primary" 
+              <Button
+                size="small"
+                type="primary"
                 onClick={() => {
                   setError(null);
                   setTimeout(() => startRecording(), 500);
