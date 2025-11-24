@@ -1,11 +1,111 @@
-# React + TypeScript + Vite
+# AI-Powered Interview Platform - Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A React-based frontend application for conducting AI-powered technical interviews with resume parsing, question generation, and real-time scoring capabilities.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Resume Upload & Parsing**: Upload PDF resumes and extract structured data
+- **AI Question Generation**: Generate technical questions based on candidate's skills and experience
+- **Interactive Interview Chat**: Conduct interviews with voice recording and text-to-speech
+- **Real-time Scoring**: Get instant feedback and scores for interview answers
+- **Interview Management**: Save, review, and manage interview sessions
+
+## Quick Start
+
+### Prerequisites
+
+- Node.js 18+ 
+- npm or yarn
+
+### Environment Setup
+
+1. Copy the environment template:
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Configure your API endpoints in `.env`:
+   ```env
+   # Backend API Configuration
+   VITE_BACKEND_URL=http://localhost:3001
+   
+   # External ML APIs Configuration  
+   VITE_ML_API_BASE_URL=http://52.66.208.231:8002
+   ```
+
+### Installation & Development
+
+1. Install dependencies:
+   ```bash
+   npm install
+   ```
+
+2. Start the development server:
+   ```bash
+   npm run dev
+   ```
+
+3. Open [http://localhost:5173](http://localhost:5173) in your browser
+
+### Building for Production
+
+1. Build the application:
+   ```bash
+   npm run build
+   ```
+
+2. Preview the build locally:
+   ```bash
+   npm run preview
+   ```
+
+The build files will be generated in the `dist` folder, ready for deployment.
+
+## Deployment
+
+### Environment Variables for Production
+
+Ensure these environment variables are set in your production environment:
+
+- `VITE_BACKEND_URL`: Your backend API URL
+- `VITE_ML_API_BASE_URL`: Your ML services API URL  
+- `VITE_API_TIMEOUT`: API timeout (default: 30000ms)
+
+### Deployment Options
+
+#### Static Hosting (Vercel, Netlify, etc.)
+1. Build the project: `npm run build`
+2. Deploy the `dist` folder to your static hosting service
+3. Configure environment variables in your hosting platform
+
+#### Docker Deployment
+```dockerfile
+FROM nginx:alpine
+COPY dist/ /usr/share/nginx/html/
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
+```
+
+## Project Structure
+
+```
+src/
+├── api/           # API client and services
+├── components/    # Reusable React components
+├── pages/         # Page components
+├── store/         # Redux store and slices
+├── utils/         # Utility functions
+└── assets/        # Static assets
+```
+
+## Technologies Used
+
+- **React 18** with TypeScript
+- **Vite** for build tooling and development server
+- **Redux Toolkit** for state management
+- **Axios** for API communication
+- **Tailwind CSS** for styling
+- **Web Speech API** for voice recording and text-to-speech
 
 ## React Compiler
 

@@ -154,7 +154,10 @@ export interface ScoringResponse {
 // Generate questions for interview
 export const generateQuestions = async (parsedResumeData: ParsedResumeData): Promise<GenerateQuestionsResponse> => {
   try {
-    const response = await fetch('http://52.66.208.231:8002/generate-questions', {
+    const baseUrl = import.meta.env.VITE_ML_API_BASE_URL || 'http://52.66.208.231:8002';
+    const endpoint = import.meta.env.VITE_GENERATE_QUESTIONS_ENDPOINT || '/generate-questions';
+    
+    const response = await fetch(`${baseUrl}${endpoint}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -168,28 +171,30 @@ export const generateQuestions = async (parsedResumeData: ParsedResumeData): Pro
 
     const data = await response.json();
     
-    // Enhanced logging for debugging
-    console.log('🎯 Generate Questions API Request:', {
-      candidateName: parsedResumeData?.personal_info?.name || 'Unknown',
-      skillsFound: parsedResumeData?.skills ? Object.keys(parsedResumeData.skills).length : 0,
-      experienceCount: parsedResumeData?.experience?.length || 0,
-      projectsCount: parsedResumeData?.projects?.length || 0,
-      educationCount: parsedResumeData?.education?.length || 0,
-      fullRequest: parsedResumeData
-    });
-    
-    console.log('🎯 Generate Questions API Response:', {
-      questionsCount: data?.questions?.length || 0,
-      technology: data?.technology || 'Not specified',
-      candidateName: data?.candidate_name || 'Not specified',
-      actualQuestions: data?.questions?.map((q: GeneratedQuestion) => ({
-        id: q.id,
-        difficulty: q.difficulty,
-        category: q.category,
-        question: q.question
-      })) || [],
-      fullResponse: data
-    });
+    // Enhanced logging for debugging (development only)
+    if (import.meta.env.DEV) {
+      console.log('🎯 Generate Questions API Request:', {
+        candidateName: parsedResumeData?.personal_info?.name || 'Unknown',
+        skillsFound: parsedResumeData?.skills ? Object.keys(parsedResumeData.skills).length : 0,
+        experienceCount: parsedResumeData?.experience?.length || 0,
+        projectsCount: parsedResumeData?.projects?.length || 0,
+        educationCount: parsedResumeData?.education?.length || 0,
+        fullRequest: parsedResumeData
+      });
+      
+      console.log('🎯 Generate Questions API Response:', {
+        questionsCount: data?.questions?.length || 0,
+        technology: data?.technology || 'Not specified',
+        candidateName: data?.candidate_name || 'Not specified',
+        actualQuestions: data?.questions?.map((q: GeneratedQuestion) => ({
+          id: q.id,
+          difficulty: q.difficulty,
+          category: q.category,
+          question: q.question
+        })) || [],
+        fullResponse: data
+      });
+    }
     
     // Log the API call for analysis
     logGenerateQuestionsResponse(
@@ -286,8 +291,11 @@ export const uploadResume = async (file: File): Promise<ResumeUploadResponse> =>
     const formData = new FormData();
     formData.append('file', file);
 
+    const baseUrl = import.meta.env.VITE_ML_API_BASE_URL || 'http://52.66.208.231:8002';
+    const endpoint = import.meta.env.VITE_PARSE_RESUME_ENDPOINT || '/parse-resume';
+
     // Call the resume parsing API
-    const parseResponse = await fetch('http://52.66.208.231:8002/parse-resume', {
+    const parseResponse = await fetch(`${baseUrl}${endpoint}`, {
       method: 'POST',
       body: formData,
     });
@@ -298,23 +306,25 @@ export const uploadResume = async (file: File): Promise<ResumeUploadResponse> =>
 
     const parsedData: ParsedResumeData = await parseResponse.json();
 
-    // Enhanced logging for debugging
-    console.log('📄 Parse Resume API Response:', {
-      candidateName: parsedData?.personal_info?.name || 'Not found',
-      email: parsedData?.personal_info?.email || 'Not found',
-      skillsCategories: parsedData?.skills ? Object.keys(parsedData.skills) : [],
-      totalSkills: parsedData?.skills ? Object.values(parsedData.skills).flat().length : 0,
-      experienceYears: parsedData?.experience?.length || 0,
-      projectsCount: parsedData?.projects?.length || 0,
-      educationCount: parsedData?.education?.length || 0,
-      skillsBreakdown: parsedData?.skills || {},
-      experienceDetail: parsedData?.experience?.map(exp => ({
-        company: exp.company,
-        role: exp.role,
-        technologies: exp.technologies_used?.slice(0, 3) || []
-      })) || [],
-      fullParsedData: parsedData
-    });
+    // Enhanced logging for debugging (development only)
+    if (import.meta.env.DEV) {
+      console.log('📄 Parse Resume API Response:', {
+        candidateName: parsedData?.personal_info?.name || 'Not found',
+        email: parsedData?.personal_info?.email || 'Not found',
+        skillsCategories: parsedData?.skills ? Object.keys(parsedData.skills) : [],
+        totalSkills: parsedData?.skills ? Object.values(parsedData.skills).flat().length : 0,
+        experienceYears: parsedData?.experience?.length || 0,
+        projectsCount: parsedData?.projects?.length || 0,
+        educationCount: parsedData?.education?.length || 0,
+        skillsBreakdown: parsedData?.skills || {},
+        experienceDetail: parsedData?.experience?.map(exp => ({
+          company: exp.company,
+          role: exp.role,
+          technologies: exp.technologies_used?.slice(0, 3) || []
+        })) || [],
+        fullParsedData: parsedData
+      });
+    }
 
     // Log the API call for analysis
     logParseResumeResponse(
@@ -349,7 +359,13 @@ export const uploadResume = async (file: File): Promise<ResumeUploadResponse> =>
       github: parsedData?.personal_info?.github && parsedData.personal_info.github !== "not found" ? parsedData.personal_info.github : undefined,
       website: parsedData?.personal_info?.website && parsedData.personal_info.website !== "not found" ? parsedData.personal_info.website : undefined,
       education: parsedData?.education?.map(edu => ({
-        institution: edu.institution
+        institution: edu.institution,
+        degree: edu.degree && edu.degree !== "not found" ? edu.degree : undefined,
+        field_of_study: edu.field_of_study && edu.field_of_study !== "not found" ? edu.field_of_study : undefined,
+        grade: edu.grade && edu.grade !== "not found" ? edu.grade : undefined,
+        start_date: edu.start_date && edu.start_date !== "not found" ? edu.start_date : undefined,
+        end_date: edu.end_date && edu.end_date !== "not found" ? edu.end_date : undefined,
+        achievements: edu.achievements && edu.achievements !== "not found" ? edu.achievements : undefined
       })) || [],
       experience: parsedData?.experience?.map(exp => ({
         key: exp.company,

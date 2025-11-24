@@ -11,6 +11,12 @@ export interface CandidateProfile {
   website?: string;
   education?: Array<{
     institution: string;
+    degree?: string;
+    field_of_study?: string;
+    grade?: string;
+    start_date?: string;
+    end_date?: string;
+    achievements?: string;
   }>;
   experience?: Array<{
     key: string;

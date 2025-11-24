@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Upload, Button, Form, Input, Space, message, Alert, Tag, Typography, Row, Col, Divider } from 'antd';
+import { Upload, Button, Form, Input, Space, message, Alert, Tag, Typography, Row, Col, Divider, Card } from 'antd';
 import {
   CloudUploadOutlined,
   CheckCircleOutlined,
@@ -33,15 +33,17 @@ const safeArrayMap = <T,>(data: T | T[] | undefined | null): T[] => {
 
 interface ResumeUploadProps {
   onStartInterview?: () => void;
+  onProfileSaved?: () => void;
 }
 
-const ResumeUpload = ({ onStartInterview }: ResumeUploadProps = {}) => {
+const ResumeUpload = ({ onStartInterview, onProfileSaved }: ResumeUploadProps = {}) => {
   const dispatch = useAppDispatch();
   const candidateState = useAppSelector((state) => state.candidate);
   const [form] = Form.useForm();
   const [uploading, setUploading] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<UploadFile | null>(null);
   const [missingFields, setMissingFields] = useState<string[]>([]);
+  const [isProfileSaved, setIsProfileSaved] = useState(false);
 
   const validateMandatoryFields = (profile: CandidateProfile) => {
     const missing = [];
@@ -140,7 +142,8 @@ const ResumeUpload = ({ onStartInterview }: ResumeUploadProps = {}) => {
       }
 
       dispatch(updateProfile(values));
-      message.success('Profile saved successfully!');
+      setIsProfileSaved(true);
+      message.success('Profile saved successfully! You can now start the interview.');
     } catch {
       message.error('Failed to save profile');
     }
@@ -150,6 +153,7 @@ const ResumeUpload = ({ onStartInterview }: ResumeUploadProps = {}) => {
     setUploadedFile(null);
     dispatch(clearCandidate());
     setMissingFields([]);
+    setIsProfileSaved(false);
     form.resetFields();
   };
 
@@ -352,11 +356,58 @@ const ResumeUpload = ({ onStartInterview }: ResumeUploadProps = {}) => {
                     <BankOutlined /> Education
                   </Title>
                   {candidateState.profile.education && candidateState.profile.education.length > 0 ? (
-                    candidateState.profile.education.map((edu, index) => (
-                      <div key={index} style={{ marginBottom: '8px' }}>
-                        <Text strong>{edu.institution}</Text>
-                      </div>
-                    ))
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                      {candidateState.profile.education.map((edu, index) => (
+                        <Card 
+                          key={index} 
+                          size="small" 
+                          style={{ 
+                            border: '1px solid #e8e8e8',
+                            borderRadius: '8px',
+                            backgroundColor: '#fafafa'
+                          }}
+                        >
+                          <div style={{ marginBottom: '12px' }}>
+                            <Text strong style={{ fontSize: '16px', color: '#1890ff' }}>
+                              {edu.institution}
+                            </Text>
+                          </div>
+                          
+                          <Row gutter={[16, 8]}>
+                            {edu.degree && (
+                              <Col span={24}>
+                                <Text strong>Degree: </Text>
+                                <Text>{edu.degree}</Text>
+                              </Col>
+                            )}
+                            {edu.field_of_study && (
+                              <Col span={24}>
+                                <Text strong>Field of Study: </Text>
+                                <Text>{edu.field_of_study}</Text>
+                              </Col>
+                            )}
+                            {edu.grade && (
+                              <Col span={12}>
+                                <Text strong>Grade: </Text>
+                                <Tag color="green">{edu.grade}</Tag>
+                              </Col>
+                            )}
+                            <Col span={12}>
+                              <Text strong>Duration: </Text>
+                              <Text type="secondary">
+                                {edu.start_date || 'N/A'} - {edu.end_date || 'Present'}
+                              </Text>
+                            </Col>
+                            {edu.achievements && (
+                              <Col span={24}>
+                                <Text strong>Achievements: </Text>
+                                <Text type="secondary">{edu.achievements}</Text>
+                              </Col>
+                            )}
+                          </Row>
+                        </Card>
+                      ))}
+                    </div>
                   ) : (
                     <Text type="secondary">No education found</Text>
                   )}
@@ -384,32 +435,38 @@ const ResumeUpload = ({ onStartInterview }: ResumeUploadProps = {}) => {
 
             {/* Action Buttons */}
             <div style={{ textAlign: 'right', marginTop: '24px', paddingBottom: '40px' }}>
-              <Space size="large">
-                <Button size="large" onClick={handleRemoveFile}>
-                  Cancel
-                </Button>
-                <Button
-                  type="primary"
-                  htmlType="submit"
-                  size="large"
-                  disabled={missingFields.length > 0}
-                  style={{ minWidth: '150px' }}
-                >
-                  Save Profile
-                </Button>
-                {missingFields.length === 0 && candidateState.isProfileComplete && (
+              <Space size="large" direction="vertical" style={{ width: '100%', alignItems: 'flex-end' }}>
+                <Space size="large">
+                  <Button size="large" onClick={handleRemoveFile}>
+                    Cancel
+                  </Button>
+                  <Button
+                    type="primary"
+                    htmlType="submit"
+                    size="large"
+                    disabled={missingFields.length > 0 || isProfileSaved}
+                    style={{ minWidth: '150px' }}
+                  >
+                    {isProfileSaved ? 'Profile Saved ✓' : 'Save Profile'}
+                  </Button>
                   <Button
                     size="large"
                     type="primary"
+                    disabled={!isProfileSaved || missingFields.length > 0}
                     style={{
-                      background: 'var(--success-color)',
-                      borderColor: 'var(--success-color)',
+                      background: isProfileSaved ? 'var(--success-color)' : '#d9d9d9',
+                      borderColor: isProfileSaved ? 'var(--success-color)' : '#d9d9d9',
                       minWidth: '200px'
                     }}
                     onClick={onStartInterview}
                   >
                     Start Interview <RocketOutlined />
                   </Button>
+                </Space>
+                {!isProfileSaved && (
+                  <Text type="secondary" style={{ fontSize: '12px', textAlign: 'right' }}>
+                    💡 Please save your profile first to enable the interview
+                  </Text>
                 )}
               </Space>
             </div>

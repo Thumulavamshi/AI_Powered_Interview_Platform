@@ -10,26 +10,41 @@ const IntervieweePage = () => {
   const candidate = useAppSelector((state) => state.candidate);
   const [activeTab, setActiveTab] = useState('resume');
 
-  // Auto-switch to interview tab when profile is complete
+  // Handle interview completion and navigate back to resume tab
   const handleInterviewComplete = (score: number, summary: string) => {
-    console.log('Interview completed:', { score, summary });
+    if (import.meta.env.DEV) {
+      console.log('Interview completed:', { score, summary });
+    }
     // The state is already updated in Redux by InterviewChat
+    
+    // Navigate back to resume tab after a short delay to show completion
+    setTimeout(() => {
+      setActiveTab('resume');
+      setIsProfileSavedForInterview(false); // Reset for potential new interview
+    }, 3000); // 3 seconds delay to show completion screen
   };
 
   const handleStartInterview = () => {
     setActiveTab('interview');
   };
 
+  // Add state to track if profile was saved
+  const [isProfileSavedForInterview, setIsProfileSavedForInterview] = useState(false);
+
+  const handleProfileSaved = () => {
+    setIsProfileSavedForInterview(true);
+  };
+
   const tabItems = [
     {
       key: 'resume',
       label: 'Resume Upload',
-      children: <ResumeUpload onStartInterview={handleStartInterview} />,
+      children: <ResumeUpload onStartInterview={handleStartInterview} onProfileSaved={handleProfileSaved} />,
     },
     {
       key: 'interview',
       label: 'Interview',
-      disabled: !candidate.isProfileComplete,
+      disabled: !candidate.isProfileComplete || !isProfileSavedForInterview,
       children: <InterviewChat onInterviewComplete={handleInterviewComplete} />,
     }
   ];

@@ -62,7 +62,9 @@ export const saveInterviewToStorage = (interview: SavedInterview): void => {
       localStorage.setItem(SAVED_INTERVIEWS_KEY, JSON.stringify(existingIds));
     }
     
-    console.log(`Interview ${interview.id} saved successfully`);
+    if (import.meta.env.DEV) {
+      console.log(`Interview ${interview.id} saved successfully`);
+    }
   } catch (error) {
     console.error('Error saving interview:', error);
     throw new Error('Failed to save interview data');
@@ -95,7 +97,9 @@ export const deleteSavedInterview = (interviewId: string): void => {
     const updatedIds = existingIds.filter(id => id !== interviewId);
     localStorage.setItem(SAVED_INTERVIEWS_KEY, JSON.stringify(updatedIds));
     
-    console.log(`Interview ${interviewId} deleted successfully`);
+    if (import.meta.env.DEV) {
+      console.log(`Interview ${interviewId} deleted successfully`);
+    }
   } catch (error) {
     console.error('Error deleting interview:', error);
     throw new Error('Failed to delete interview data');
@@ -130,7 +134,9 @@ export const clearAllSavedInterviews = (): void => {
     // Clear the list
     localStorage.removeItem(SAVED_INTERVIEWS_KEY);
     
-    console.log('All saved interviews cleared successfully');
+    if (import.meta.env.DEV) {
+      console.log('All saved interviews cleared successfully');
+    }
   } catch (error) {
     console.error('Error clearing saved interviews:', error);
     throw new Error('Failed to clear saved interviews');

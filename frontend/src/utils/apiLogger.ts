@@ -44,8 +44,10 @@ export class APILogger {
     }
     this.logs[apiName].push(logEntry);
 
-    // Log to console for immediate visibility
-    console.log(`🔍 ${apiName} API Call:`, logEntry);
+    // Log to console for immediate visibility (development only)
+    if (import.meta.env.DEV) {
+      console.log(`🔍 ${apiName} API Call:`, logEntry);
+    }
 
     // Save to file
     this.saveToFile(apiName);

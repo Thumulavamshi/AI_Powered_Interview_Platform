@@ -1,5 +1,5 @@
 import React from 'react';
-import { Card, Descriptions, Tag, Space, Typography, Divider } from 'antd';
+import { Card, Descriptions, Tag, Space, Typography, Divider, Row, Col } from 'antd';
 import { 
   UserOutlined, 
   MailOutlined, 
@@ -120,9 +120,43 @@ const ProfileDisplay: React.FC<ProfileDisplayProps> = ({ profile, className }) =
               <Card 
                 key={index} 
                 size="small" 
-                style={{ marginBottom: '8px', backgroundColor: '#fafafa' }}
+                style={{ marginBottom: '12px', backgroundColor: '#fafafa' }}
               >
-                <Text strong>{edu.institution}</Text>
+                <div style={{ marginBottom: '8px' }}>
+                  <Text strong style={{ fontSize: '16px', color: '#1890ff' }}>
+                    {edu.institution}
+                  </Text>
+                </div>
+                {edu.degree && (
+                  <div style={{ marginBottom: '4px' }}>
+                    <Text strong>Degree: </Text>
+                    <Text>{edu.degree}</Text>
+                  </div>
+                )}
+                {edu.field_of_study && (
+                  <div style={{ marginBottom: '4px' }}>
+                    <Text strong>Field of Study: </Text>
+                    <Text>{edu.field_of_study}</Text>
+                  </div>
+                )}
+                {edu.grade && (
+                  <div style={{ marginBottom: '4px' }}>
+                    <Text strong>Grade: </Text>
+                    <Tag color="green">{edu.grade}</Tag>
+                  </div>
+                )}
+                <div style={{ marginBottom: '4px' }}>
+                  <Text strong>Duration: </Text>
+                  <Text type="secondary">
+                    {edu.start_date || 'N/A'} - {edu.end_date || 'Present'}
+                  </Text>
+                </div>
+                {edu.achievements && (
+                  <div>
+                    <Text strong>Achievements: </Text>
+                    <Text type="secondary">{edu.achievements}</Text>
+                  </div>
+                )}
               </Card>
             ))}
           </div>
