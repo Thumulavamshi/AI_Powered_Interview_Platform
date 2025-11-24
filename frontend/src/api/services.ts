@@ -1,4 +1,5 @@
 import apiClient from './client';
+import { logParseResumeResponse, logGenerateQuestionsResponse, logScoringResponse } from '../utils/apiLogger';
 
 export interface ParsedResumeData {
   personal_info: {
@@ -124,13 +125,10 @@ export interface ScoringPayload {
 export interface QuestionScore {
   question_id: number;
   question: string;
-  difficulty: string;
   category: string;
   candidate_answer: string;
   time_taken: number;
-  max_time_allowed: number;
-  content_score: number;
-  total_score: number;
+  score: number;  // This is what the API actually returns (0-10 scale)
   feedback: string;
   strengths: string[];
   weaknesses: string[];
@@ -140,17 +138,11 @@ export interface QuestionScore {
 
 export interface ScoringResponse {
   candidate_name: string;
-  technology: string;
+  technology?: string;
   total_questions: number;
   questions_attempted: number;
   question_scores: QuestionScore[];
-  difficulty_breakdown: {
-    easy: { avg_content_score: number; count: number };
-    medium: { avg_content_score: number; count: number };
-    hard: { avg_content_score: number; count: number };
-  };
   final_score: {
-    content_score: number;
     overall_score: number;
   };
   overall_feedback: string;
@@ -175,6 +167,36 @@ export const generateQuestions = async (parsedResumeData: ParsedResumeData): Pro
     }
 
     const data = await response.json();
+    
+    // Enhanced logging for debugging
+    console.log('🎯 Generate Questions API Request:', {
+      candidateName: parsedResumeData?.personal_info?.name || 'Unknown',
+      skillsFound: parsedResumeData?.skills ? Object.keys(parsedResumeData.skills).length : 0,
+      experienceCount: parsedResumeData?.experience?.length || 0,
+      projectsCount: parsedResumeData?.projects?.length || 0,
+      educationCount: parsedResumeData?.education?.length || 0,
+      fullRequest: parsedResumeData
+    });
+    
+    console.log('🎯 Generate Questions API Response:', {
+      questionsCount: data?.questions?.length || 0,
+      technology: data?.technology || 'Not specified',
+      candidateName: data?.candidate_name || 'Not specified',
+      actualQuestions: data?.questions?.map((q: GeneratedQuestion) => ({
+        id: q.id,
+        difficulty: q.difficulty,
+        category: q.category,
+        question: q.question
+      })) || [],
+      fullResponse: data
+    });
+    
+    // Log the API call for analysis
+    logGenerateQuestionsResponse(
+      JSON.parse(JSON.stringify(parsedResumeData)) as Record<string, unknown>,
+      JSON.parse(JSON.stringify(data)) as Record<string, unknown>
+    );
+    
     return data;
   } catch (error) {
     console.error('Generate questions API error:', error);
@@ -198,6 +220,43 @@ export const scoreAnswers = async (payload: ScoringPayload): Promise<ScoringResp
     }
 
     const data = await response.json();
+    
+    // Enhanced logging for debugging
+    console.log('🏆 Score Answers API Request:', {
+      candidateName: payload.candidate_info.name,
+      technology: payload.candidate_info.technology,
+      questionsCount: payload.interview_data.length,
+      questionBreakdown: payload.interview_data.map(q => ({
+        id: q.question_id,
+        difficulty: q.difficulty,
+        category: q.category,
+        answerLength: q.answer.length,
+        timeTaken: q.time_taken
+      }))
+    });
+    
+    console.log('🏆 Score Answers API Response:', {
+      candidateName: data?.candidate_name || 'Not specified',
+      technology: data?.technology || 'Not specified',
+      totalQuestions: data?.total_questions || 0,
+      questionsAttempted: data?.questions_attempted || 0,
+      finalScore: data?.final_score || 'Not provided',
+      overallFeedback: data?.overall_feedback || 'Not provided',
+      questionScores: data?.question_scores?.map((score: QuestionScore) => ({
+        id: score.question_id,
+        category: score.category,
+        score: score.score,
+        feedbackSnippet: score.feedback?.substring(0, 100) + '...'
+      })) || [],
+      fullResponse: data
+    });
+    
+    // Log the API call for analysis
+    logScoringResponse(
+      JSON.parse(JSON.stringify(payload)) as Record<string, unknown>,
+      JSON.parse(JSON.stringify(data)) as Record<string, unknown>
+    );
+    
     return data;
   } catch (error) {
     console.error('Score answers API error:', error);
@@ -238,6 +297,35 @@ export const uploadResume = async (file: File): Promise<ResumeUploadResponse> =>
     }
 
     const parsedData: ParsedResumeData = await parseResponse.json();
+
+    // Enhanced logging for debugging
+    console.log('📄 Parse Resume API Response:', {
+      candidateName: parsedData?.personal_info?.name || 'Not found',
+      email: parsedData?.personal_info?.email || 'Not found',
+      skillsCategories: parsedData?.skills ? Object.keys(parsedData.skills) : [],
+      totalSkills: parsedData?.skills ? Object.values(parsedData.skills).flat().length : 0,
+      experienceYears: parsedData?.experience?.length || 0,
+      projectsCount: parsedData?.projects?.length || 0,
+      educationCount: parsedData?.education?.length || 0,
+      skillsBreakdown: parsedData?.skills || {},
+      experienceDetail: parsedData?.experience?.map(exp => ({
+        company: exp.company,
+        role: exp.role,
+        technologies: exp.technologies_used?.slice(0, 3) || []
+      })) || [],
+      fullParsedData: parsedData
+    });
+
+    // Log the API call for analysis
+    logParseResumeResponse(
+      { 
+        fileName: file.name, 
+        fileSize: file.size, 
+        fileType: file.type,
+        endpoint: 'parse-resume'
+      }, 
+      JSON.parse(JSON.stringify(parsedData)) as Record<string, unknown>
+    );
 
     // Helper to flatten skills object
     const flattenSkills = (skillsObj: ParsedResumeData['skills']): string[] => {

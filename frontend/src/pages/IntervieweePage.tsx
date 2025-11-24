@@ -102,7 +102,7 @@ const IntervieweePage = () => {
                   key={index}
                   type="inner"
                   title={`Question ${index + 1}: ${qScore.question}`}
-                  extra={<Tag color={qScore.total_score >= 7 ? 'green' : qScore.total_score >= 4 ? 'orange' : 'red'}>Score: {qScore.total_score}/10</Tag>}
+                  extra={<Tag color={qScore.score >= 7 ? 'green' : qScore.score >= 4 ? 'orange' : 'red'}>Score: {qScore.score}/10</Tag>}
                   style={{ marginBottom: '16px' }}
                 >
                   <Row gutter={[16, 16]}>

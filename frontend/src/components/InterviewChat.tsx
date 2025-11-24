@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Card, Button, Progress, Typography, Space, message, Tag, Row, Col, Statistic } from 'antd';
+import { Card, Button, Progress, Typography, Space, message, Tag, Row, Col } from 'antd';
 import {
   AudioOutlined,
   ClockCircleOutlined,
   SoundOutlined,
-  CheckCircleOutlined,
   RightOutlined,
   SendOutlined
 } from '@ant-design/icons';
@@ -16,7 +15,6 @@ import VoiceRecorder from './VoiceRecorder';
 import { saveInterviewToStorage, createSavedInterviewFromState } from '../utils/interviewStorage';
 
 const { Text, Title, Paragraph } = Typography;
-const { Countdown } = Statistic;
 
 interface InterviewChatProps {
   onInterviewComplete?: (score: number, summary: string) => void;
@@ -150,24 +148,87 @@ const InterviewChat: React.FC<InterviewChatProps> = ({ onInterviewComplete }) =>
     setInterviewState('GENERATING');
 
     try {
-      const resumeData: ParsedResumeData = {
-        personal_info: {
-          name: candidate.profile.name || "not found",
-          email: candidate.profile.email || "not found",
-          phone: candidate.profile.phone || "not found",
-          linkedin: candidate.profile.linkedin || "not found",
-          github: candidate.profile.github || "not found",
-          website: candidate.profile.website || "not found"
-        },
-        other_info: {
-          education: candidate.profile.education || [],
-          experience: candidate.profile.experience || [],
-          projects: candidate.profile.projects || [],
-          extra_info: {
-            skills: candidate.profile.skills || []
-          }
-        }
-      };
+      // Use the FULL parsed resume data instead of reconstructed profile data
+      let resumeData: ParsedResumeData;
+      
+      try {
+        // The resumeText contains the full ParsedResumeData from the parse-resume API
+        resumeData = JSON.parse(candidate.resumeText) as ParsedResumeData;
+        console.log('🎯 Using FULL parsed resume data for question generation:', {
+          candidateName: resumeData.personal_info?.name,
+          personalInfo: resumeData.personal_info,
+          skillsCategories: Object.keys(resumeData.skills || {}),
+          experienceCount: resumeData.experience?.length || 0,
+          projectsCount: resumeData.projects?.length || 0,
+          technologiesInExperience: resumeData.experience?.map(exp => exp.technologies_used?.slice(0, 3)).flat().filter(Boolean) || [],
+          allSkills: resumeData.skills,
+          sampleExperience: resumeData.experience?.slice(0, 2).map(exp => ({
+            company: exp.company,
+            role: exp.role,
+            technologies: exp.technologies_used?.slice(0, 3)
+          })),
+          sampleProjects: resumeData.projects?.slice(0, 2).map(proj => ({
+            title: proj.title,
+            technologies: proj.technologies?.slice(0, 3)
+          }))
+        });
+      } catch (parseError) {
+        console.warn('Failed to parse stored resume data, falling back to profile data:', parseError);
+        // Fallback to the old method if JSON parsing fails
+        resumeData = {
+          personal_info: {
+            name: candidate.profile.name || "not found",
+            email: candidate.profile.email || "not found",
+            phone: candidate.profile.phone || "not found",
+            linkedin: candidate.profile.linkedin || null,
+            github: candidate.profile.github || null,
+            website: candidate.profile.website || null,
+            location: null
+          },
+          education: candidate.profile.education?.map(edu => ({
+            institution: edu.institution,
+            degree: "not found",
+            field_of_study: null,
+            grade: null,
+            start_date: "not found",
+            end_date: null,
+            achievements: null
+          })) || [],
+          experience: candidate.profile.experience?.map(exp => ({
+            company: exp.key,
+            role: "not found",
+            start_date: exp.start,
+            end_date: exp.end === 'Present' ? null : exp.end,
+            duration: null,
+            location: null,
+            responsibilities: exp.description,
+            technologies_used: [],
+            key_achievements: null
+          })) || [],
+          projects: candidate.profile.projects?.map(proj => ({
+            title: proj.title,
+            description: proj.description.join(' '),
+            role: "not found",
+            technologies: [],
+            key_features: [],
+            challenges_solved: [],
+            link: null,
+            duration: "not found"
+          })) || [],
+          skills: {
+            languages: candidate.profile.skills?.slice(0, 5) || [],
+            frameworks: [],
+            databases: [],
+            tools: [],
+            cloud_platforms: [],
+            other: candidate.profile.skills?.slice(5) || []
+          },
+          certifications: [],
+          achievements: [],
+          publications: null,
+          languages: null
+        };
+      }
 
       const response: GenerateQuestionsResponse = await generateQuestions(resumeData);
       dispatch(startInterviewAction(response.questions));
@@ -236,7 +297,7 @@ const InterviewChat: React.FC<InterviewChatProps> = ({ onInterviewComplete }) =>
     const currentIndex = candidate.interviewProgress?.questionIndex || 0;
     answerTimesRef.current[currentIndex] = timeTaken;
 
-    handleNextQuestion(false);
+    handleNextQuestion();
   };
 
   const handleSkipQuestion = () => {
@@ -260,10 +321,10 @@ const InterviewChat: React.FC<InterviewChatProps> = ({ onInterviewComplete }) =>
     }));
     
     message.info('Question skipped. Moving to next question.');
-    handleNextQuestion(true); // true = skipped
+    handleNextQuestion();
   };
 
-  const handleNextQuestion = (skipped: boolean) => {
+  const handleNextQuestion = () => {
     if (!candidate.interviewProgress?.generatedQuestions) return;
 
     const currentIndex = candidate.interviewProgress.questionIndex;
@@ -371,16 +432,6 @@ const InterviewChat: React.FC<InterviewChatProps> = ({ onInterviewComplete }) =>
   };
 
   // Render Helpers
-  const getProgressPercent = () => {
-    if (interviewState === 'WAITING_TO_START') {
-      return (timeLeft / START_TIMEOUT) * 100;
-    }
-    if (interviewState === 'RECORDING') {
-      return (timeLeft / ANSWER_TIMEOUT) * 100;
-    }
-    return 0;
-  };
-
   const getTimerColor = () => {
     if (timeLeft <= 10) return '#ff4d4f';
     return '#1890ff';

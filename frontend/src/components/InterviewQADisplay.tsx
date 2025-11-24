@@ -44,15 +44,20 @@ const InterviewQADisplay: React.FC<InterviewQADisplayProps> = ({
 
   const getQuestionScore = (questionId: string) => {
     if (!scoringResults?.question_scores) return null;
-    // Assuming questionId maps to index + 1 or we match by question text if needed
-    // But ideally we should have a reliable ID. 
-    // For now, let's try to find by question text or index if possible.
-    // Since answers are in order, we can use the index.
-    const index = answers.findIndex(a => a.questionId === questionId);
-    if (index !== -1 && scoringResults.question_scores[index]) {
-      return scoringResults.question_scores[index];
+    
+    // First try to match by question_id (convert string to number)
+    const questionIdNum = parseInt(questionId);
+    let questionScore = scoringResults.question_scores.find(qs => qs.question_id === questionIdNum);
+    
+    if (!questionScore) {
+      // Fallback: match by array index (assuming answers are in same order as questions)
+      const index = answers.findIndex(a => a.questionId === questionId);
+      if (index !== -1 && scoringResults.question_scores[index]) {
+        questionScore = scoringResults.question_scores[index];
+      }
     }
-    return null;
+    
+    return questionScore || null;
   };
 
   if (answers.length === 0) {
@@ -72,8 +77,8 @@ const InterviewQADisplay: React.FC<InterviewQADisplayProps> = ({
 
     return {
       dot: questionScore ? (
-        <Badge count={Math.round(questionScore.total_score * 10)} style={{ backgroundColor: getScoreColor(questionScore.total_score * 10) }}>
-          <CheckCircleOutlined style={{ fontSize: '16px', color: getScoreColor(questionScore.total_score * 10) }} />
+        <Badge count={questionScore.score} style={{ backgroundColor: getScoreColor(questionScore.score * 10) }}>
+          <CheckCircleOutlined style={{ fontSize: '16px', color: getScoreColor(questionScore.score * 10) }} />
         </Badge>
       ) : (
         <ClockCircleOutlined style={{ fontSize: '16px', color: '#1890ff' }} />
@@ -113,7 +118,7 @@ const InterviewQADisplay: React.FC<InterviewQADisplayProps> = ({
             <Card
               size="small"
               style={{
-                borderLeft: `4px solid ${getScoreColor(questionScore.total_score * 10)}`,
+                borderLeft: `4px solid ${getScoreColor(questionScore.score * 10)}`,
                 marginTop: '8px'
               }}
             >
@@ -121,13 +126,13 @@ const InterviewQADisplay: React.FC<InterviewQADisplayProps> = ({
                 <Space>
                   <Text strong>Score:</Text>
                   <Progress
-                    percent={questionScore.total_score * 10}
+                    percent={questionScore.score * 10}
                     size="small"
-                    strokeColor={getScoreColor(questionScore.total_score * 10)}
+                    strokeColor={getScoreColor(questionScore.score * 10)}
                     style={{ width: '100px' }}
                   />
-                  <Text style={{ color: getScoreColor(questionScore.total_score * 10), fontWeight: 'bold' }}>
-                    {questionScore.total_score}/10
+                  <Text style={{ color: getScoreColor(questionScore.score * 10), fontWeight: 'bold' }}>
+                    {questionScore.score}/10
                   </Text>
                 </Space>
               </div>
