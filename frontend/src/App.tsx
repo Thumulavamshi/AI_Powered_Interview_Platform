@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Layout, Tabs, Typography, Button } from 'antd';
+import { Layout, Tabs, Typography } from 'antd';
 import { RocketOutlined, HistoryOutlined, BugOutlined } from '@ant-design/icons';
 import IntervieweePage from './pages/IntervieweePage';
 import InterviewerPage from './pages/InterviewerPage';

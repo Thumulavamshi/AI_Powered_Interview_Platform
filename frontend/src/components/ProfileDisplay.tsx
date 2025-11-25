@@ -1,5 +1,5 @@
 import React from 'react';
-import { Card, Descriptions, Tag, Space, Typography, Divider, Row, Col } from 'antd';
+import { Card, Descriptions, Tag, Space, Typography, Divider } from 'antd';
 import { 
   UserOutlined, 
   MailOutlined, 

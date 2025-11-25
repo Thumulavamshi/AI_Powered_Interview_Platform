@@ -20,7 +20,6 @@
    VITE_BACKEND_URL=http://localhost:3001
    
    # External ML APIs - UPDATE THESE FOR PRODUCTION
-   VITE_ML_API_BASE_URL=http://52.66.208.231:8002
    
    # API Endpoints (usually don't change)
    VITE_PARSE_RESUME_ENDPOINT=/parse-resume

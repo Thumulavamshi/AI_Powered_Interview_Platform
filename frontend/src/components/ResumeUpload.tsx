@@ -1,8 +1,7 @@
 import { useState } from 'react';
-import { Upload, Button, Form, Input, Space, message, Alert, Tag, Typography, Row, Col, Divider, Card } from 'antd';
+import { Upload, Button, Form, Input, Space, message, Tag, Typography, Row, Col, Divider, Card } from 'antd';
 import {
   CloudUploadOutlined,
-  CheckCircleOutlined,
   ExclamationCircleOutlined,
   LinkOutlined,
   PhoneOutlined,
@@ -143,6 +142,7 @@ const ResumeUpload = ({ onStartInterview, onProfileSaved }: ResumeUploadProps = 
 
       dispatch(updateProfile(values));
       setIsProfileSaved(true);
+      onProfileSaved?.();
       message.success('Profile saved successfully! You can now start the interview.');
     } catch {
       message.error('Failed to save profile');
@@ -320,7 +320,7 @@ const ResumeUpload = ({ onStartInterview, onProfileSaved }: ResumeUploadProps = 
                             ))}
                           </ul>
                         )}
-                        {index < (candidateState.profile.experience?.length || 0) - 1 && <Divider style={{ margin: '16px 0' }} />}
+                        {index < ((candidateState.profile?.experience?.length || 0) - 1) && <Divider style={{ margin: '16px 0' }} />}
                       </div>
                     ))
                   ) : (
