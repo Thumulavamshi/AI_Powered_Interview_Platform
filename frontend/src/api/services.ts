@@ -154,10 +154,11 @@ export interface ScoringResponse {
 // Generate questions for interview
 export const generateQuestions = async (parsedResumeData: ParsedResumeData): Promise<GenerateQuestionsResponse> => {
   try {
-    const baseUrl = import.meta.env.VITE_ML_API_BASE_URL || 'http://52.66.208.231:8002';
-    const endpoint = import.meta.env.VITE_GENERATE_QUESTIONS_ENDPOINT || '/generate-questions';
-    
-    const response = await fetch(`${baseUrl}${endpoint}`, {
+    // In development call the ML backend directly (configurable via VITE_ML_API_BASE_URL).
+    // In production (non-DEV) use the serverless proxy at `/api/*` to avoid mixed-content.
+    const useProxy = !import.meta.env.DEV;
+    const endpoint = useProxy ? '/api/generate-questions' : (import.meta.env.VITE_ML_API_BASE_URL || 'http://52.66.208.231:8002') + (import.meta.env.VITE_GENERATE_QUESTIONS_ENDPOINT || '/generate-questions');
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -212,7 +213,10 @@ export const generateQuestions = async (parsedResumeData: ParsedResumeData): Pro
 // Score interview answers
 export const scoreAnswers = async (payload: ScoringPayload): Promise<ScoringResponse> => {
   try {
-    const response = await fetch('http://52.66.208.231:8002/score-answers', {
+    const useProxy = !import.meta.env.DEV;
+    const endpoint = useProxy ? '/api/score-answers' : (import.meta.env.VITE_ML_API_BASE_URL || 'http://52.66.208.231:8002') + '/score-answers';
+    // Call the proxy endpoint which forwards to the ML scoring API (or direct in dev)
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -291,11 +295,9 @@ export const uploadResume = async (file: File): Promise<ResumeUploadResponse> =>
     const formData = new FormData();
     formData.append('file', file);
 
-    const baseUrl = import.meta.env.VITE_ML_API_BASE_URL || 'http://52.66.208.231:8002';
-    const endpoint = import.meta.env.VITE_PARSE_RESUME_ENDPOINT || '/parse-resume';
-
-    // Call the resume parsing API
-    const parseResponse = await fetch(`${baseUrl}${endpoint}`, {
+    const useProxy = !import.meta.env.DEV;
+    const endpoint = useProxy ? '/api/parse-resume' : (import.meta.env.VITE_ML_API_BASE_URL || 'http://52.66.208.231:8002') + (import.meta.env.VITE_PARSE_RESUME_ENDPOINT || '/parse-resume');
+    const parseResponse = await fetch(endpoint, {
       method: 'POST',
       body: formData,
     });
