@@ -22,11 +22,7 @@ export default async function handler(req, res) {
     // Use the URL constructor to join base + path safely (handles slashes correctly).
     const url = path ? new URL(path, targetBase).toString() : new URL('', targetBase).toString();
 
-    console.log('[proxy] incoming', { method: req.method, path, url, reqUrl: req.url });
-    // Log limited headers for debugging (avoid logging large auth headers)
-    const debugHeaders = { ...req.headers };
-    if (debugHeaders.authorization) debugHeaders.authorization = '[REDACTED]';
-    console.log('[proxy] incoming headers:', Object.keys(debugHeaders));
+    // Minimal proxy behavior: forward request to upstream without verbose logging
 
     // Read raw request body
     const chunks = [];
@@ -44,21 +40,7 @@ export default async function handler(req, res) {
       body: ['GET', 'HEAD'].includes(req.method) ? undefined : body,
       // keep credentials/cookies out; backend should accept forwarded requests
     });
-    // Debug: log upstream response status and a short preview of body when JSON/text
-    console.log('[proxy] upstream status:', fetchRes.status);
-    const contentType = fetchRes.headers.get('content-type') || '';
-    let upstreamTextPreview = '';
-    try {
-      if (contentType.includes('application/json') || contentType.includes('text/') ) {
-        const txt = await fetchRes.clone().text();
-        upstreamTextPreview = txt.slice(0, 2000);
-        console.log('[proxy] upstream body preview:', upstreamTextPreview);
-      } else {
-        console.log('[proxy] upstream content-type:', contentType);
-      }
-    } catch (e) {
-      console.log('[proxy] failed to read upstream body preview', e?.message || e);
-    }
+    // Do not log upstream response body in production to avoid leaking data
 
     // Set response status and headers
     res.status(fetchRes.status);

@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { Layout, Tabs, Typography } from 'antd';
-import { RocketOutlined, HistoryOutlined, BugOutlined } from '@ant-design/icons';
+import { RocketOutlined, HistoryOutlined } from '@ant-design/icons';
 import IntervieweePage from './pages/IntervieweePage';
 import InterviewerPage from './pages/InterviewerPage';
 import StartNewInterviewButton from './components/StartNewInterviewButton';
 import SavedInterviewsButton from './components/SavedInterviewsButton';
-import APIDebugPanel from './components/APIDebugPanel';
+// APIDebugPanel removed from production UI
 import { useAppSelector, useAppDispatch } from './store/hooks';
 import { setCurrentTab } from './store/sessionSlice';
 import './App.css';
@@ -42,19 +42,7 @@ function App() {
       ),
       children: <InterviewerPage />,
     },
-    {
-      key: 'debug',
-      label: (
-        <span style={{ fontSize: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <BugOutlined /> API Debug
-        </span>
-      ),
-      children: (
-        <div style={{ maxWidth: '600px', margin: '0 auto' }}>
-          <APIDebugPanel />
-        </div>
-      ),
-    },
+    // Debug tab removed from production UI
   ];
 
   return (
