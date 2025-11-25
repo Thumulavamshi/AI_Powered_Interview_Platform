@@ -6,12 +6,23 @@ const DEFAULT_TARGET = 'http://52.66.208.231:8002';
 
 export default async function handler(req, res) {
   try {
-    const proxyPath = req.query.proxy;
-    const path = Array.isArray(proxyPath) ? proxyPath.join('/') : proxyPath || '';
-    const targetBase = process.env.ML_API_BASE_URL || DEFAULT_TARGET;
-    const url = `${targetBase}/${path}`.replace(/(?<!:)\/\//g, '/').replace('http:/', 'http://').replace('https:/', 'https://');
+    // Derive the proxied path robustly. Prefer the Next/Vercel-provided query param,
+    // but fall back to parsing req.url to handle edge cases where query is empty.
+    let path = '';
+    const proxyPath = req.query && req.query.proxy;
+    if (proxyPath) {
+      path = Array.isArray(proxyPath) ? proxyPath.join('/') : String(proxyPath);
+    } else if (req.url) {
+      // req.url looks like '/api/parse-resume' or '/api/generate-questions'
+      const m = req.url.match(/^\/api\/(.*)$/);
+      path = m && m[1] ? m[1] : '';
+    }
 
-    console.log('[proxy] incoming', { method: req.method, path, url });
+    const targetBase = process.env.ML_API_BASE_URL || DEFAULT_TARGET;
+    // Use the URL constructor to join base + path safely (handles slashes correctly).
+    const url = path ? new URL(path, targetBase).toString() : new URL('', targetBase).toString();
+
+    console.log('[proxy] incoming', { method: req.method, path, url, reqUrl: req.url });
     // Log limited headers for debugging (avoid logging large auth headers)
     const debugHeaders = { ...req.headers };
     if (debugHeaders.authorization) debugHeaders.authorization = '[REDACTED]';
