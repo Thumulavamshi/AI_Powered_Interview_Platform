@@ -11,6 +11,12 @@ export default async function handler(req, res) {
     const targetBase = process.env.ML_API_BASE_URL || DEFAULT_TARGET;
     const url = `${targetBase}/${path}`.replace(/(?<!:)\/\//g, '/').replace('http:/', 'http://').replace('https:/', 'https://');
 
+    console.log('[proxy] incoming', { method: req.method, path, url });
+    // Log limited headers for debugging (avoid logging large auth headers)
+    const debugHeaders = { ...req.headers };
+    if (debugHeaders.authorization) debugHeaders.authorization = '[REDACTED]';
+    console.log('[proxy] incoming headers:', Object.keys(debugHeaders));
+
     // Read raw request body
     const chunks = [];
     for await (const chunk of req) chunks.push(chunk);
@@ -27,12 +33,30 @@ export default async function handler(req, res) {
       body: ['GET', 'HEAD'].includes(req.method) ? undefined : body,
       // keep credentials/cookies out; backend should accept forwarded requests
     });
+    // Debug: log upstream response status and a short preview of body when JSON/text
+    console.log('[proxy] upstream status:', fetchRes.status);
+    const contentType = fetchRes.headers.get('content-type') || '';
+    let upstreamTextPreview = '';
+    try {
+      if (contentType.includes('application/json') || contentType.includes('text/') ) {
+        const txt = await fetchRes.clone().text();
+        upstreamTextPreview = txt.slice(0, 2000);
+        console.log('[proxy] upstream body preview:', upstreamTextPreview);
+      } else {
+        console.log('[proxy] upstream content-type:', contentType);
+      }
+    } catch (e) {
+      console.log('[proxy] failed to read upstream body preview', e?.message || e);
+    }
 
     // Set response status and headers
     res.status(fetchRes.status);
     fetchRes.headers.forEach((value, name) => {
-      // Vercel/Node may forbid some headers; most should be fine to pass through
-      res.setHeader(name, value);
+      try {
+        res.setHeader(name, value);
+      } catch (err) {
+        // some headers are forbidden to set; ignore them
+      }
     });
 
     // Stream response back
